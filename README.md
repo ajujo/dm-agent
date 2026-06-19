@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-**Fase 0–1 + F1.1 + F2.1 + F2.2 + F3.1–F3.6 + F4.1–F4.4**: análisis, esqueleto, repo preparado, cliente LLM, **REPL mínima jugable**, **esquemas base de estado** (`Ficha`, `EstadoPartida`, `Evento`), **persistencia JSON** (`GestorEstado`), **tools `ficha.*` / `hp_xp.*` / `inventario.*`** con **eventos auditables unificados**, **memoria narrativa** (`narrativa.*`), **resúmenes con LLM** (`resumen.*`), **inyección automática de memoria al contexto** y **cierre de sesión** (`sesion.*` + comando `/cerrar`: resumen de cierre + punto de arranque de la próxima). El agente ya puede cerrar una sesión generando resumen y preparación, y recordarlos al continuar, pero **aún no tiene RAG, memoria vectorial, entidades estructuradas, economía, combate, reglas completas, streaming ni cierre automático al salir**: no es una campaña completa.
+**Fase 0–1 + F1.1 + F2.1 + F2.2 + F3.1–F3.6 + F4.1–F4.5**: análisis, esqueleto, repo preparado, cliente LLM, **REPL mínima jugable**, **esquemas base de estado** (`Ficha`, `EstadoPartida`, `Evento`), **persistencia JSON** (`GestorEstado`), **tools `ficha.*` / `hp_xp.*` / `inventario.*`** con **eventos auditables unificados**, **memoria narrativa** (`narrativa.*`), **resúmenes con LLM** (`resumen.*`), **inyección automática de memoria al contexto** y **cierre de sesión** (`sesion.*` + comando `/cerrar`: resumen de cierre + punto de arranque de la próxima). Con **F4.5** el bucle de continuidad está **validado extremo a extremo** (test integrado con mock LLM, `tests/test_campaña_integrada_f4.py`) y documentado para validación real (`docs/PRUEBA_MANUAL_F4.md`): el proyecto tiene una **campaña persistente básica**. **Aún no tiene combate, RAG, memoria vectorial, entidades estructuradas, economía, reglas adaptadas implementadas, streaming ni cierre automático al salir**: no es una campaña completa.
 
 `dm-agent` usa D&D 5.5 como base pero lo **adapta** a juego narrativo en solitario / teatro de la mente (ver [`docs/REGLAS_ADAPTADAS.md`](docs/REGLAS_ADAPTADAS.md) y [ADR-0017](docs/decisiones/0017-dnd55-narrativo-solitario.md)); esa adaptación es por ahora solo diseño.
 
@@ -78,6 +78,7 @@ dm-agent --continuar              # retoma última sesión
 | [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) | Visión completa del sistema. |
 | [`docs/PLAN_FASES.md`](docs/PLAN_FASES.md) | Hoja de ruta por fases. |
 | [`docs/PRUEBA_MANUAL_F2.md`](docs/PRUEBA_MANUAL_F2.md) | Cómo validar la REPL contra un endpoint local. |
+| [`docs/PRUEBA_MANUAL_F4.md`](docs/PRUEBA_MANUAL_F4.md) | Cómo validar la campaña persistente básica contra un endpoint real. |
 | [`docs/esquemas/`](docs/esquemas/) | Esquemas de datos: ficha, estado de partida, evento. |
 | [`docs/estado/gestor_estado.md`](docs/estado/gestor_estado.md) | Persistencia JSON de estado (GestorEstado). |
 | [`docs/tools/ficha.md`](docs/tools/ficha.md) | Tools `ficha.*` (leer/guardar/validar/actualizar/listar). |

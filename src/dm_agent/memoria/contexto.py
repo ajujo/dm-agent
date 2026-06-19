@@ -27,8 +27,11 @@ _MAX_LINEA = 240
 
 
 def _linea_entrada(e: EntradaNarrativa) -> str:
-    texto = e.titulo.strip() if e.titulo and e.titulo.strip() else e.contenido.strip()
-    texto = " ".join(texto.split())  # colapsa saltos de línea
+    titulo = e.titulo.strip() if e.titulo else ""
+    contenido = " ".join(e.contenido.split())
+    # Incluimos título Y contenido: el contenido es lo que de verdad da
+    # continuidad (p. ej. el punto de arranque de una entrada `siguiente_sesion`).
+    texto = f"{titulo}: {contenido}" if titulo else contenido
     if len(texto) > _MAX_LINEA:
         texto = texto[: _MAX_LINEA - 1].rstrip() + "…"
     return f"- [{e.tipo}] {texto}"

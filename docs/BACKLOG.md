@@ -117,7 +117,11 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Estado.** `memoria/contexto.py` (`ConstructorContextoMemoria.construir_bloque_memoria`): último resumen + N entradas recientes no-resumen → bloque Markdown compacto. `AgenteDM` lo inyecta como 2º mensaje `system` (antes del historial/usuario, sin sustituir el base) cuando hay constructor + campaña. Config `memoria` (`inyectar_narrativa`/`limite_entradas_contexto`/`incluir_resumenes`) y `campaña_activa` en `proyecto.json` (defaults seguros; campaña por defecto `campana_demo`). Docs: `docs/memoria/contexto.md`. Tests: `tests/test_contexto_memoria.py`, `tests/test_agente_memoria.py`. No es RAG ni memoria vectorial.
 ### #F4-04 — Cierre y preparación de sesión — ✅ HECHO (F4.4)
 - **Estado.** `memoria/cierre_sesion.py` (`CierreSesionNarrativa.cerrar_sesion`): genera resumen de cierre + preparación de próxima sesión y guarda dos entradas (`resumen` + `siguiente_sesion`) con mismo `campaña_id`/`sesion_id`. Prompt `prompts/cierre_sesion.md` (parseo por encabezados + degradación documentada). Tools `sesion.{cerrar,cerrar_texto}` (`herramientas/sesion.py`); `Sesion.texto_para_resumen()`. Comando REPL `/cerrar`. Docs: `docs/memoria/cierre_sesion.md`, `docs/tools/sesion.md`. Tests: `tests/test_cierre_sesion.py`, `tests/test_tools_sesion.py`.
-- **Pendiente:** prueba integrada real (F4.5); cierre automático al salir; selector de campaña.
+- **Pendiente:** cierre automático al salir; selector de campaña.
+- **P.** P1.
+### #F4-05 — Prueba integrada de campaña + guía manual — ✅ HECHO (F4.5)
+- **Estado.** Validación extremo a extremo del bucle de continuidad, sin funcionalidad nueva. Test con mock LLM `tests/test_campaña_integrada_f4.py`: ficha → escena narrativa → `inventario.añadir` + `hp_xp.aplicar_daño` → cierre (`resumen` + `siguiente_sesion`) → `AgenteDM` con memoria inyectada antes del mensaje de usuario; todo bajo `tmp_path`, sin red ni `storage/` real. Guía manual real `docs/PRUEBA_MANUAL_F4.md` (endpoint vLLM, ficha vía APIs del proyecto, REPL, escena, memoria, inventario, HP/XP, `/cerrar`, `--continuar`, criterios de aceptación y troubleshooting). Ajuste menor en `memoria/contexto.py`: las entradas recientes inyectan título **y** contenido (antes solo título), para que el punto de arranque de `siguiente_sesion` llegue al modelo.
+- **Resultado.** El proyecto tiene una **campaña persistente básica validada** (test integrado mock + guía manual), pero **aún no** tiene combate, RAG, memoria vectorial ni reglas adaptadas.
 - **P.** P1.
 
 ---
