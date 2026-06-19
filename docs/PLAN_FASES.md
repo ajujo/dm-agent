@@ -100,12 +100,12 @@ Subfases:
 
 Subfases:
 - **F4.1 — Bitácora narrativa + memoria narrativa básica.** ✅ **Implementada** (commit `feat: add narrative memory log`). `EntradaNarrativa`, `GestorMemoriaNarrativa` (JSONL + Markdown append-only) y tools `narrativa.{registrar,reciente}`. Sin resumen LLM ni inyección automática.
-- **F4.2 — Resumen de escena/sesión con LLM.** ⏳ Pendiente.
+- **F4.2 — Resumen de escena/sesión con LLM.** ✅ **Implementada** (commit `feat: add narrative summarization tools`). `ResumidorNarrativo` + tools `resumen.{entradas,texto}` + prompt fijo `resumen_narrativo.md`; guardan `EntradaNarrativa(tipo="resumen")`. Sin inyección automática.
 - **F4.3 — Inyección de memoria narrativa en el contexto del agente.** ⏳ Pendiente.
 
-**Archivos.** `esquemas/narrativa.py` + `memoria/narrativa.py` + `herramientas/narrativa.py` ✅ F4.1; resumen/inyección ⏳.
+**Archivos.** `esquemas/narrativa.py` + `memoria/narrativa.py` + `herramientas/narrativa.py` ✅ F4.1; `memoria/resumen.py` + `herramientas/resumen.py` + `prompts/resumen_narrativo.md` ✅ F4.2; inyección ⏳.
 
-**Tests.** `tests/test_memoria_narrativa.py`, `tests/test_tools_narrativa.py` ✅ F4.1. Resumen reproducible con prompt fijo y mock LLM ⏳.
+**Tests.** `tests/test_memoria_narrativa.py`, `tests/test_tools_narrativa.py` ✅ F4.1; `tests/test_resumen_memoria.py`, `tests/test_tools_resumen.py` (resumen con prompt fijo y mock LLM) ✅ F4.2.
 
 **Definición de hecho.** Tras cerrar y reabrir, una partida puede continuar con contexto coherente. *(No alcanzada aún: F4.1 persiste la memoria pero todavía no se resume ni se inyecta al contexto.)*
 

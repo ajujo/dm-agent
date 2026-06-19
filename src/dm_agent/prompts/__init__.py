@@ -19,3 +19,4 @@ def cargar_prompt(nombre: str) -> str:
 
 
 SYSTEM_DM_MINIMO = "system_dm_minimo"
+RESUMEN_NARRATIVO = "resumen_narrativo"

@@ -5,5 +5,19 @@ append-only en Markdown + JSONL. Distinta de los eventos mecánicos.
 """
 
 from dm_agent.memoria.narrativa import GestorMemoriaNarrativa
+from dm_agent.memoria.resumen import (
+    ErrorResumen,
+    MaterialVacio,
+    ResumenVacio,
+    ResumidorNarrativo,
+    SinEntradasParaResumir,
+)
 
-__all__ = ["GestorMemoriaNarrativa"]
+__all__ = [
+    "ErrorResumen",
+    "GestorMemoriaNarrativa",
+    "MaterialVacio",
+    "ResumenVacio",
+    "ResumidorNarrativo",
+    "SinEntradasParaResumir",
+]

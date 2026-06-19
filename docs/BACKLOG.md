@@ -111,7 +111,8 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 
 ### #F4-01 — Esquema de memoria + bitácora narrativa append-only — ✅ HECHO (F4.1)
 - **Estado.** `esquemas/narrativa.py` (`EntradaNarrativa`), `memoria/narrativa.py` (`GestorMemoriaNarrativa`: JSONL + `bitacora.md` append-only), tools `narrativa.{registrar,reciente}` (`herramientas/narrativa.py`), registradas en el agente. Docs: `docs/memoria/narrativa.md`, `docs/tools/narrativa.md`. Tests: `tests/test_memoria_narrativa.py`, `tests/test_tools_narrativa.py`.
-### #F4-02 — Resumen de escena/sesión con LLM  ⏳ F4.2
+### #F4-02 — Resumen de escena/sesión con LLM — ✅ HECHO (F4.2)
+- **Estado.** `memoria/resumen.py` (`ResumidorNarrativo`: `resumir_texto`/`resumir_entradas`), tools `resumen.{entradas,texto}` (`herramientas/resumen.py`), prompt fijo `prompts/resumen_narrativo.md`. Guardan `EntradaNarrativa(tipo="resumen", importancia=5, origen="resumen")`. Registradas en el agente. Docs: `docs/memoria/resumenes.md`, `docs/tools/resumen.md`. Tests con mock LLM: `tests/test_resumen_memoria.py`, `tests/test_tools_resumen.py`. Sin inyección automática (F4.3).
 ### #F4-03 — Inyección de memoria narrativa en contexto del agente  ⏳ F4.3
 ### #F4-04 — Skill `preparar-siguiente`
 - **P.** P1.

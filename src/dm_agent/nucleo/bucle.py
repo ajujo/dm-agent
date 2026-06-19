@@ -20,8 +20,10 @@ from dm_agent.herramientas.hp_xp import crear_tools_hp_xp
 from dm_agent.herramientas.inventario import crear_tools_inventario
 from dm_agent.herramientas.narrativa import crear_tools_narrativa
 from dm_agent.herramientas.registro import RegistroHerramientas
+from dm_agent.herramientas.resumen import crear_tools_resumen
 from dm_agent.llm.cliente import ClienteLLM, ErrorLLM
 from dm_agent.memoria.narrativa import GestorMemoriaNarrativa
+from dm_agent.memoria.resumen import ResumidorNarrativo
 from dm_agent.nucleo.agente import AgenteDM
 from dm_agent.persistencia.sesion import Sesion
 from dm_agent.prompts import SYSTEM_DM_MINIMO, cargar_prompt
@@ -50,6 +52,7 @@ def _crear_registro(
     gestor: GestorEstado,
     registro_eventos: RegistroEventosEstado,
     memoria_narrativa: GestorMemoriaNarrativa,
+    resumidor: ResumidorNarrativo,
 ) -> RegistroHerramientas:
     registro = RegistroHerramientas()
     registro.registrar(crear_tool_dados())
@@ -60,6 +63,8 @@ def _crear_registro(
     for tool in crear_tools_inventario(gestor, registro_eventos):
         registro.registrar(tool)
     for tool in crear_tools_narrativa(memoria_narrativa):
+        registro.registrar(tool)
+    for tool in crear_tools_resumen(resumidor):
         registro.registrar(tool)
     return registro
 
@@ -106,8 +111,9 @@ class SesionInteractiva:
         self.gestor = GestorEstado(raiz_storage)
         self.registro_eventos = RegistroEventosEstado(raiz_storage)
         self.memoria_narrativa = GestorMemoriaNarrativa(raiz_storage)
+        self.resumidor = ResumidorNarrativo(self.cliente, self.memoria_narrativa)
         self.registro = _crear_registro(
-            self.gestor, self.registro_eventos, self.memoria_narrativa
+            self.gestor, self.registro_eventos, self.memoria_narrativa, self.resumidor
         )
         self.system_prompt = cargar_prompt(SYSTEM_DM_MINIMO)
 
