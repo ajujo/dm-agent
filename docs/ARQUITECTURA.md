@@ -85,12 +85,31 @@ dm-agent/
 │   ├── llm/                  # cliente OpenAI-compatible
 │   └── esquemas/             # dataclasses / pydantic
 ├── skills/                   # skills empacadas (SKILL.md + scripts)
-├── compendio/                # datos SRD migrados (LICENSE incluido)
+├── compendio/                # contenido permitido/documentado (LICENSE incluido)
+├── compendio_privado/        # contenido privado del usuario (gitignored, ver D17)
 ├── tests/
 ├── docs/
 ├── scripts/
-└── storage/                  # personajes, campañas, sesiones (datos del usuario)
+└── storage/                  # personajes, campañas, sesiones (datos del usuario, gitignored)
 ```
+
+### Separación motor / contenido (D17)
+
+Por higiene técnica, el **motor** se mantiene separado del **contenido privado**
+(ver [ADR-0017](./decisiones/0017-dnd55-narrativo-solitario.md)):
+
+```text
+src/                  -> motor limpio
+config/               -> configuración
+storage/              -> partidas privadas (gitignored)
+compendio/            -> contenido permitido/documentado
+compendio_privado/    -> contenido privado del usuario (gitignored)
+```
+
+`dm-agent` usa D&D 5.5 como base de resolución, pero lo **adapta** a juego
+narrativo en solitario / teatro de la mente mediante reglas caseras persistentes
+aprobadas por el usuario (3 capas: regla base → adaptación solitario → preferencias
+de campaña). Catálogo de adaptación y flujo: [`REGLAS_ADAPTADAS.md`](./REGLAS_ADAPTADAS.md).
 
 ## 5. Núcleo del agente
 

@@ -87,6 +87,9 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 
 ### #F3-00 — Esquemas base (`Ficha`, `EstadoPartida`, `Evento`) — ✅ HECHO (F3.1)
 - **Estado.** `src/dm_agent/esquemas/{ficha,estado,evento,comun}.py` (pydantic v2, `version_schema=1`, validaciones explícitas). Docs en `docs/esquemas/`. Tests: `tests/test_esquemas_f3.py`. Sin tools ni gestor de estado todavía.
+### #F3-00b — GestorEstado JSON + snapshots — ✅ HECHO (F3.2)
+- **Estado.** `src/dm_agent/estado/gestor.py` (`GestorEstado`): guardar/cargar `Ficha` y `EstadoPartida`, listar fichas, escritura atómica (tmp+replace), snapshots opcionales, errores tipados (`ErrorEstado{,NoEncontrado,Invalido}`). Docs: `docs/estado/gestor_estado.md`. Tests: `tests/test_gestor_estado.py`.
+- **Pendiente F3.5:** unificar los dos `Evento` (`nucleo.eventos` dataclass runtime + `esquemas.evento` pydantic persistible).
 ### #F3-01 — Tools `ficha.*` (sobre esquema `Ficha`)  ⏳ F3.3
 ### #F3-02 — Tools `hp_xp.*` (sobre `Ficha`/`EstadoPartida`)  ⏳ F3.4
 ### #F3-03 — Tools `inventario.*`

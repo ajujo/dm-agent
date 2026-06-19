@@ -36,6 +36,9 @@ storage/
 *.sqlite
 *.db
 
+# Contenido privado del usuario (ver ADR-0017 / D17)
+compendio_privado/
+
 # Caches de modelos / RAG
 .cache/
 indices/

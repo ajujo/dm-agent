@@ -4,6 +4,7 @@
 >
 > **Cerradas en F1.1:** D1, D2, D3, D4, D5, D13 — ver [§ Decisiones cerradas](#decisiones-cerradas)
 > y los ADR ligeros en [`docs/decisiones/`](./decisiones/).
+> **Cerrada en F3.2:** D17 — ver [ADR-0017](./decisiones/0017-dnd55-narrativo-solitario.md).
 
 | # | Decisión | Opciones | Recomendación inicial | Fase |
 |---|---|---|---|---|
@@ -23,6 +24,7 @@
 | D14 | Soporte multi-sistema (PbtA, FATE…) | Sí v1 / No v1 | **No v1** — primero D&D 5e sólido. Arquitectura genérica preserva opción. | F12 |
 | D15 | Estado de combate compartido entre PJ y enemigos | Una estructura única / dos estructuras separadas | **Una única estructura** con `participantes[]`. | F5 |
 | D16 | Cómo se pide a un agente pequeño implementar una fase | Issue → PR / Tareas en `AGENTS.md` / Plan + chequeo manual | **Issue (en `docs/BACKLOG.md`) → rama → tests → review** flujo simple. | F1 |
+| D17 | ✅ **CERRADA** — D&D 5.5 narrativo en solitario / teatro de la mente | Simulador táctico fiel / Adaptación narrativa | **Adaptación narrativa en solitario** con reglas caseras persistentes aprobadas por el usuario (3 capas). Ver [ADR-0017](./decisiones/0017-dnd55-narrativo-solitario.md) y [`REGLAS_ADAPTADAS.md`](./REGLAS_ADAPTADAS.md). | F3.2 (doc) |
 
 ---
 

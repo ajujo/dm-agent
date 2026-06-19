@@ -78,16 +78,18 @@ Subfases:
 
 Subfases:
 - **F3.1 — Esquemas base (`Ficha`, `EstadoPartida`, `Evento`).** ✅ **Implementada** (commit `feat: add core state schemas`). Solo modelos pydantic v2 + validaciones + docs + tests; sin tools, sin gestor de estado.
-- **F3.2 — GestorEstado JSON + snapshots.** ⏳ Pendiente.
+- **F3.2 — GestorEstado JSON + snapshots.** ✅ **Implementada** (commit `feat: add JSON state manager`). Persistencia JSON de `Ficha`/`EstadoPartida` con escritura atómica y snapshots opcionales. Sin tools todavía.
 - **F3.3 — Tools `ficha.*`.** ⏳ Pendiente.
 - **F3.4 — Tools `hp_xp.*`.** ⏳ Pendiente.
-- **F3.5 — Eventos JSONL auditables por cambio.** ⏳ Pendiente.
+- **F3.5 — Eventos JSONL auditables por cambio.** ⏳ Pendiente. **Incluye unificar los dos `Evento`** (el dataclass de `nucleo.eventos` y el pydantic de `esquemas.evento`).
 
-**Archivos.** `esquemas/{ficha,estado,evento,comun}.py` ✅ F3.1; `herramientas/{ficha,hp_xp,inventario,condiciones}.py`, `estado/estado_partida.py`, `nucleo/eventos.py` (real), `nucleo/logger.py` (append-only) ⏳.
+**Archivos.** `esquemas/{ficha,estado,evento,comun}.py` ✅ F3.1; `estado/gestor.py` ✅ F3.2; `herramientas/{ficha,hp_xp,inventario,condiciones}.py`, `nucleo/eventos.py` (real), `nucleo/logger.py` (append-only) ⏳.
 
-**Tests.** `tests/test_esquemas_f3.py` ✅ F3.1. Cobertura por tool (mínimo 1 happy path + 2 errores cada una) ⏳.
+**Tests.** `tests/test_esquemas_f3.py` ✅ F3.1; `tests/test_gestor_estado.py` ✅ F3.2. Cobertura por tool (mínimo 1 happy path + 2 errores cada una) ⏳.
 
-**Definición de hecho.** El LLM ya no puede tocar HP/XP/inventario directamente; cada cambio deja Evento. *(No alcanzada aún: F3.1 solo aporta los esquemas.)*
+**Definición de hecho.** El LLM ya no puede tocar HP/XP/inventario directamente; cada cambio deja Evento. *(No alcanzada aún: F3.1 aporta esquemas, F3.2 aporta persistencia; faltan las tools.)*
+
+> **Reglas adaptadas (D17).** Documentación en `docs/REGLAS_ADAPTADAS.md` + [ADR-0017](./decisiones/0017-dnd55-narrativo-solitario.md): D&D 5.5 adaptado a juego narrativo en solitario. La implementación (motor de adaptación, tools de aprobación de reglas caseras) se planificará en una fase de reglas posterior; **no** forma parte de F3.
 
 ---
 
