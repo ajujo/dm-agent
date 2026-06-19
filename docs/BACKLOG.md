@@ -66,17 +66,19 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Tests.** `tests/test_cliente_llm.py` con `httpx.MockTransport` (sin red). Smoke opcional: `scripts/check_llm_mock.py`.
 - **P.** P0.
 
-### #F2-02 — Bucle del agente sin tools
+### #F2-02 — Bucle del agente — ✅ HECHO (F2.2)
 - **Aceptación.** Conversación user↔LLM con system prompt.
-- **Tests.** integración mock.
+- **Estado.** `src/dm_agent/nucleo/agente.py` (`AgenteDM`). Incluye round-trip de tool calls (solo `dados_tirar` ejecutable; tool desconocida → error controlado reinyectado) y protección `max_iter_turno`. System prompt mínimo en `src/dm_agent/prompts/system_dm_minimo.md`. Tests: `tests/test_agente_minimo.py`.
 - **Dep.** #F2-01.
 - **P.** P0.
 
-### #F2-03 — Persistencia de sesión JSONL
+### #F2-03 — Persistencia de sesión JSONL — ✅ HECHO (F2.2)
+- **Estado.** `src/dm_agent/persistencia/sesion.py` (`Sesion`): JSONL append-only, crear/cargar/continuar/última, registros user/assistant/tool_call/tool_result. Tests: `tests/test_sesion_jsonl.py`.
 - **P.** P0.
 
-### #F2-04 — CLI REPL (`dm-agent`)
-- **Comandos.** `/ayuda /guardar /cargar /salir /perfil /debug`.
+### #F2-04 — CLI REPL (`dm-agent`) — ✅ HECHO (F2.2)
+- **Comandos.** `/ayuda /salir /guardar /continuar /nueva /debug`. Flags: `--perfil --nueva --continuar --debug`. Error claro (sin traceback) si el perfil/endpoint no es válido.
+- **Estado.** `src/dm_agent/cli.py` + `src/dm_agent/nucleo/bucle.py`. Tests: `tests/test_cli.py`. *(`/cargar` y `--perfil` por sesión guardada quedan para más adelante.)*
 - **P.** P0.
 
 ---

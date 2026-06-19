@@ -53,19 +53,21 @@
 
 Subfases:
 - **F2.1 — Cliente LLM OpenAI-compatible.** ✅ **Implementada** (commit `feat: add OpenAI-compatible LLM client`).
-- **F2.2 — Agent loop mínimo + REPL + sesión JSONL.** ⏳ Pendiente.
+- **F2.2 — Agent loop mínimo + REPL + sesión JSONL.** ✅ **Implementada** (commit `feat: add minimal DM agent loop and REPL`).
 
 **Archivos.**
-- `src/dm_agent/llm/cliente.py` (cliente OpenAI-compatible). ✅ F2.1 — no-streaming; `stream=True` lanza `NotImplementedError` (streaming queda para F2.2+).
-- `src/dm_agent/nucleo/bucle.py` (loop minimalista user↔LLM, sin tools aún). ⏳ F2.2.
-- `src/dm_agent/cli.py` (REPL con `/ayuda`, `/guardar`, `/salir`). ⏳ F2.2.
-- `src/dm_agent/persistencia/sesion.py`. ⏳ F2.2.
+- `src/dm_agent/llm/cliente.py` (cliente OpenAI-compatible). ✅ F2.1 — no-streaming; `stream=True` lanza `NotImplementedError`.
+- `src/dm_agent/nucleo/agente.py` (`AgenteDM`: loop con tool round-trip y `max_iter_turno`). ✅ F2.2.
+- `src/dm_agent/nucleo/bucle.py` (REPL + cableado del agente). ✅ F2.2.
+- `src/dm_agent/cli.py` (REPL con `/ayuda`, `/salir`, `/guardar`, `/continuar`, `/nueva`, `/debug`). ✅ F2.2.
+- `src/dm_agent/persistencia/sesion.py` (JSONL append-only). ✅ F2.2.
+- `src/dm_agent/prompts/system_dm_minimo.md` (system prompt mínimo de DM). ✅ F2.2.
 
 **Tests.**
 - `test_cliente_llm.py` mock del endpoint (`httpx.MockTransport`). ✅ F2.1.
-- `test_sesion.py` guardar/cargar. ⏳ F2.2.
+- `test_sesion_jsonl.py`, `test_agente_minimo.py`, `test_cli.py`. ✅ F2.2.
 
-**Definición de hecho.** Sesión interactiva real contra un vLLM/LM Studio local; transcripción persistente. *(Aún NO alcanzada: F2.1 solo aporta el cliente; el juego interactivo llega en F2.2.)*
+**Definición de hecho.** Sesión interactiva real contra un vLLM/LM Studio local; transcripción persistente. ✅ Alcanzada en lo esencial: chat CLI por turnos con dados reales y sesión JSONL. *Pendiente para fases siguientes: ficha/combate/estado, memoria avanzada, RAG y streaming.*
 
 ---
 

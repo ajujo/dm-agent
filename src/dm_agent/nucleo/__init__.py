@@ -1,4 +1,4 @@
 """Núcleo del agente — agent loop, contexto, eventos, logger.
 
-Stubs en Fase 1. Implementación efectiva en Fase 2+.
+F2.2: `agente.AgenteDM` (loop mínimo) y `bucle` (REPL + cableado).
 """

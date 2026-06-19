@@ -6,9 +6,28 @@
 
 ## Estado actual
 
-**Fase 0–1 + F1.1 + F2.1**: análisis, esqueleto, repo preparado y cliente LLM. **Aún no se puede jugar** (no hay REPL ni agent loop todavía: eso es F2.2). Hay diseño, plantilla de proyecto, un tool real (`dados`) y un cliente LLM OpenAI-compatible, todo con tests.
+**Fase 0–1 + F1.1 + F2.1 + F2.2**: análisis, esqueleto, repo preparado, cliente LLM y **REPL mínima jugable**. Primer chat CLI funcional con un LLM local y dados reales — pero **todavía no es una campaña completa**: no hay ficha de personaje, combate, inventario, estado del mundo, RAG ni memoria avanzada. Solo historial narrativo de la sesión.
 
 Roadmap completo: [`docs/PLAN_FASES.md`](docs/PLAN_FASES.md).
+
+## REPL mínima (F2.2)
+
+`dm-agent` arranca un chat por turnos contra un endpoint LLM OpenAI-compatible. El agente:
+- usa un system prompt mínimo de Director de Juego;
+- ofrece la tool `dados_tirar` (si el modelo la llama, se ejecuta de verdad y el resultado vuelve al modelo);
+- persiste cada turno en un JSONL append-only bajo `storage/sesiones/`.
+
+```bash
+conda activate rpg
+dm-agent                 # sesión nueva
+dm-agent --perfil rapido # elige perfil de modelo
+dm-agent --continuar     # retoma la última sesión
+dm-agent --debug         # traza de tool calls
+```
+
+Comandos dentro del REPL: `/ayuda`, `/salir`, `/guardar`, `/continuar`, `/nueva`, `/debug`.
+
+Limitaciones de F2.2: solo `stream=False`; **sin ficha, combate, inventario, estado mecánico, RAG ni memoria avanzada**; el historial entre turnos se reconstruye solo desde los mensajes de usuario/asistente (el round-trip de tools vive dentro del turno).
 
 ## Cliente LLM
 
@@ -22,7 +41,7 @@ resp = cliente.chat(messages=[{"role": "user", "content": "Hola"}])
 print(resp.content)
 ```
 
-Limitaciones de F2.1: solo `stream=False` (con `stream=True` lanza `NotImplementedError`); **no hay todavía REPL ni bucle de juego**. Smoke sin servidor real: `python scripts/check_llm_mock.py`.
+Limitaciones de F2.1: solo `stream=False` (con `stream=True` lanza `NotImplementedError`). Smoke sin servidor real: `python scripts/check_llm_mock.py`.
 
 ## Requisitos
 
