@@ -18,8 +18,10 @@ from dm_agent.herramientas.dados import crear_tool_dados
 from dm_agent.herramientas.ficha import crear_tools_ficha
 from dm_agent.herramientas.hp_xp import crear_tools_hp_xp
 from dm_agent.herramientas.inventario import crear_tools_inventario
+from dm_agent.herramientas.narrativa import crear_tools_narrativa
 from dm_agent.herramientas.registro import RegistroHerramientas
 from dm_agent.llm.cliente import ClienteLLM, ErrorLLM
+from dm_agent.memoria.narrativa import GestorMemoriaNarrativa
 from dm_agent.nucleo.agente import AgenteDM
 from dm_agent.persistencia.sesion import Sesion
 from dm_agent.prompts import SYSTEM_DM_MINIMO, cargar_prompt
@@ -45,7 +47,9 @@ def _texto_ayuda() -> str:
 
 
 def _crear_registro(
-    gestor: GestorEstado, registro_eventos: RegistroEventosEstado
+    gestor: GestorEstado,
+    registro_eventos: RegistroEventosEstado,
+    memoria_narrativa: GestorMemoriaNarrativa,
 ) -> RegistroHerramientas:
     registro = RegistroHerramientas()
     registro.registrar(crear_tool_dados())
@@ -54,6 +58,8 @@ def _crear_registro(
     for tool in crear_tools_hp_xp(gestor, registro_eventos):
         registro.registrar(tool)
     for tool in crear_tools_inventario(gestor, registro_eventos):
+        registro.registrar(tool)
+    for tool in crear_tools_narrativa(memoria_narrativa):
         registro.registrar(tool)
     return registro
 
@@ -99,7 +105,10 @@ class SesionInteractiva:
         raiz_storage = _raiz_storage(self.proyecto, self.config_dir)
         self.gestor = GestorEstado(raiz_storage)
         self.registro_eventos = RegistroEventosEstado(raiz_storage)
-        self.registro = _crear_registro(self.gestor, self.registro_eventos)
+        self.memoria_narrativa = GestorMemoriaNarrativa(raiz_storage)
+        self.registro = _crear_registro(
+            self.gestor, self.registro_eventos, self.memoria_narrativa
+        )
         self.system_prompt = cargar_prompt(SYSTEM_DM_MINIMO)
 
         self.sesion: Sesion | None = None

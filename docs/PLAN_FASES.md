@@ -98,11 +98,16 @@ Subfases:
 
 **Objetivo.** Bitácora narrativa append-only + resúmenes de escena/sesión inyectables.
 
-**Archivos.** `memoria/{tipos,almacen}.py`, `narrativa/{director,bitacora}.py`, `herramientas/sesion.py`.
+Subfases:
+- **F4.1 — Bitácora narrativa + memoria narrativa básica.** ✅ **Implementada** (commit `feat: add narrative memory log`). `EntradaNarrativa`, `GestorMemoriaNarrativa` (JSONL + Markdown append-only) y tools `narrativa.{registrar,reciente}`. Sin resumen LLM ni inyección automática.
+- **F4.2 — Resumen de escena/sesión con LLM.** ⏳ Pendiente.
+- **F4.3 — Inyección de memoria narrativa en el contexto del agente.** ⏳ Pendiente.
 
-**Tests.** Resumen reproducible con prompt fijo y mock LLM; bitácora no se pierde.
+**Archivos.** `esquemas/narrativa.py` + `memoria/narrativa.py` + `herramientas/narrativa.py` ✅ F4.1; resumen/inyección ⏳.
 
-**Definición de hecho.** Tras cerrar y reabrir, una partida puede continuar con contexto coherente.
+**Tests.** `tests/test_memoria_narrativa.py`, `tests/test_tools_narrativa.py` ✅ F4.1. Resumen reproducible con prompt fijo y mock LLM ⏳.
+
+**Definición de hecho.** Tras cerrar y reabrir, una partida puede continuar con contexto coherente. *(No alcanzada aún: F4.1 persiste la memoria pero todavía no se resume ni se inyecta al contexto.)*
 
 ---
 
