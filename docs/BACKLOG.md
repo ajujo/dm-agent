@@ -85,13 +85,17 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 
 ## F3 — Tools deterministas
 
-### #F3-01 — Esquema `Ficha` + tools `ficha.*`
-### #F3-02 — Esquema `EstadoPartida` + tools `hp_xp.*`
+### #F3-00 — Esquemas base (`Ficha`, `EstadoPartida`, `Evento`) — ✅ HECHO (F3.1)
+- **Estado.** `src/dm_agent/esquemas/{ficha,estado,evento,comun}.py` (pydantic v2, `version_schema=1`, validaciones explícitas). Docs en `docs/esquemas/`. Tests: `tests/test_esquemas_f3.py`. Sin tools ni gestor de estado todavía.
+### #F3-01 — Tools `ficha.*` (sobre esquema `Ficha`)  ⏳ F3.3
+### #F3-02 — Tools `hp_xp.*` (sobre `Ficha`/`EstadoPartida`)  ⏳ F3.4
 ### #F3-03 — Tools `inventario.*`
 ### #F3-04 — Tools `condiciones.*`
-### #F3-05 — Bus de eventos + logger append-only JSONL
+### #F3-05 — Bus de eventos + logger append-only JSONL  ⏳ F3.5
 ### #F3-06 — Validador central de cambios de estado
 - **P.** todas P1.
+
+> Nota: F3.2 (GestorEstado JSON + snapshots) se intercala entre los esquemas y las tools.
 
 ---
 

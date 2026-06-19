@@ -76,11 +76,18 @@ Subfases:
 
 **Objetivo.** Tool-calling real. Estado mecánico modificable solo vía tools, con validación.
 
-**Archivos.** `herramientas/{ficha,hp_xp,inventario,condiciones}.py`, `estado/estado_partida.py`, `esquemas/{ficha,evento}.py`, `nucleo/eventos.py` (real), `nucleo/logger.py` (append-only).
+Subfases:
+- **F3.1 — Esquemas base (`Ficha`, `EstadoPartida`, `Evento`).** ✅ **Implementada** (commit `feat: add core state schemas`). Solo modelos pydantic v2 + validaciones + docs + tests; sin tools, sin gestor de estado.
+- **F3.2 — GestorEstado JSON + snapshots.** ⏳ Pendiente.
+- **F3.3 — Tools `ficha.*`.** ⏳ Pendiente.
+- **F3.4 — Tools `hp_xp.*`.** ⏳ Pendiente.
+- **F3.5 — Eventos JSONL auditables por cambio.** ⏳ Pendiente.
 
-**Tests.** Cobertura por tool (mínimo 1 happy path + 2 errores cada una). Determinismo de dados verificado.
+**Archivos.** `esquemas/{ficha,estado,evento,comun}.py` ✅ F3.1; `herramientas/{ficha,hp_xp,inventario,condiciones}.py`, `estado/estado_partida.py`, `nucleo/eventos.py` (real), `nucleo/logger.py` (append-only) ⏳.
 
-**Definición de hecho.** El LLM ya no puede tocar HP/XP/inventario directamente; cada cambio deja Evento.
+**Tests.** `tests/test_esquemas_f3.py` ✅ F3.1. Cobertura por tool (mínimo 1 happy path + 2 errores cada una) ⏳.
+
+**Definición de hecho.** El LLM ya no puede tocar HP/XP/inventario directamente; cada cambio deja Evento. *(No alcanzada aún: F3.1 solo aporta los esquemas.)*
 
 ---
 

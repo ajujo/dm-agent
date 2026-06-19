@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-**Fase 0–1 + F1.1 + F2.1 + F2.2**: análisis, esqueleto, repo preparado, cliente LLM y **REPL mínima jugable**. Primer chat CLI funcional con un LLM local y dados reales — pero **todavía no es una campaña completa**: no hay ficha de personaje, combate, inventario, estado del mundo, RAG ni memoria avanzada. Solo historial narrativo de la sesión.
+**Fase 0–1 + F1.1 + F2.1 + F2.2 + F3.1**: análisis, esqueleto, repo preparado, cliente LLM, **REPL mínima jugable** y **esquemas base de estado** (`Ficha`, `EstadoPartida`, `Evento`). Primer chat CLI funcional con un LLM local y dados reales — pero **todavía no es una campaña completa**: F3.1 solo añade los modelos de datos; **aún no hay tools de ficha, HP/XP, combate, inventario, estado mecánico operativo, RAG ni memoria avanzada**. El REPL sigue manejando solo historial narrativo.
 
 Roadmap completo: [`docs/PLAN_FASES.md`](docs/PLAN_FASES.md).
 
@@ -76,6 +76,7 @@ dm-agent --continuar              # retoma última sesión
 | [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) | Visión completa del sistema. |
 | [`docs/PLAN_FASES.md`](docs/PLAN_FASES.md) | Hoja de ruta por fases. |
 | [`docs/PRUEBA_MANUAL_F2.md`](docs/PRUEBA_MANUAL_F2.md) | Cómo validar la REPL contra un endpoint local. |
+| [`docs/esquemas/`](docs/esquemas/) | Esquemas de datos: ficha, estado de partida, evento. |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Issues iniciales. |
 | [`docs/RIESGOS.md`](docs/RIESGOS.md) | Riesgos técnicos y mitigaciones. |
 | [`docs/DECISIONES_ABIERTAS.md`](docs/DECISIONES_ABIERTAS.md) | Decisiones pendientes. |
