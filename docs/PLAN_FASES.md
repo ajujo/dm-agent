@@ -51,17 +51,21 @@
 
 **Objetivo.** `dm-agent` arranca, conecta a un endpoint OpenAI-compatible, mantiene una sesión con guardado.
 
+Subfases:
+- **F2.1 — Cliente LLM OpenAI-compatible.** ✅ **Implementada** (commit `feat: add OpenAI-compatible LLM client`).
+- **F2.2 — Agent loop mínimo + REPL + sesión JSONL.** ⏳ Pendiente.
+
 **Archivos.**
-- `src/dm_agent/llm/cliente.py` (cliente OpenAI-compatible streaming).
-- `src/dm_agent/nucleo/bucle.py` (loop minimalista user↔LLM, sin tools aún).
-- `src/dm_agent/cli.py` (REPL con `/ayuda`, `/guardar`, `/salir`).
-- `src/dm_agent/persistencia/sesion.py`.
+- `src/dm_agent/llm/cliente.py` (cliente OpenAI-compatible). ✅ F2.1 — no-streaming; `stream=True` lanza `NotImplementedError` (streaming queda para F2.2+).
+- `src/dm_agent/nucleo/bucle.py` (loop minimalista user↔LLM, sin tools aún). ⏳ F2.2.
+- `src/dm_agent/cli.py` (REPL con `/ayuda`, `/guardar`, `/salir`). ⏳ F2.2.
+- `src/dm_agent/persistencia/sesion.py`. ⏳ F2.2.
 
 **Tests.**
-- `test_cliente_llm.py` mock del endpoint.
-- `test_sesion.py` guardar/cargar.
+- `test_cliente_llm.py` mock del endpoint (`httpx.MockTransport`). ✅ F2.1.
+- `test_sesion.py` guardar/cargar. ⏳ F2.2.
 
-**Definición de hecho.** Sesión interactiva real contra un vLLM/LM Studio local; transcripción persistente.
+**Definición de hecho.** Sesión interactiva real contra un vLLM/LM Studio local; transcripción persistente. *(Aún NO alcanzada: F2.1 solo aporta el cliente; el juego interactivo llega en F2.2.)*
 
 ---
 

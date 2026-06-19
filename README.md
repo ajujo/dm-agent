@@ -6,9 +6,23 @@
 
 ## Estado actual
 
-**Fase 0–1**: análisis y esqueleto. Aún no se puede jugar. Hay diseño, plantilla de proyecto y un tool real (`dados`) con tests.
+**Fase 0–1 + F1.1 + F2.1**: análisis, esqueleto, repo preparado y cliente LLM. **Aún no se puede jugar** (no hay REPL ni agent loop todavía: eso es F2.2). Hay diseño, plantilla de proyecto, un tool real (`dados`) y un cliente LLM OpenAI-compatible, todo con tests.
 
 Roadmap completo: [`docs/PLAN_FASES.md`](docs/PLAN_FASES.md).
+
+## Cliente LLM
+
+Desde **F2.1** existe un cliente OpenAI-compatible basado en `httpx` (sin SDK de OpenAI, sin `litellm`): `dm_agent.llm.ClienteLLM`. Resuelve un perfil de `config/perfiles.json` contra su endpoint en `config/modelos.json`, construye la petición a `POST {base_url}/chat/completions`, soporta `tools` y parsea `tool_calls` **sin ejecutarlas** (la ejecución es trabajo del agent loop, F2.2).
+
+```python
+from dm_agent.llm import ClienteLLM
+
+cliente = ClienteLLM.desde_config("rapido")
+resp = cliente.chat(messages=[{"role": "user", "content": "Hola"}])
+print(resp.content)
+```
+
+Limitaciones de F2.1: solo `stream=False` (con `stream=True` lanza `NotImplementedError`); **no hay todavía REPL ni bucle de juego**. Smoke sin servidor real: `python scripts/check_llm_mock.py`.
 
 ## Requisitos
 
@@ -52,7 +66,7 @@ dm-agent --continuar              # retoma última sesión
 
 ## Licencia
 
-Por decidir (ver `DECISIONES_ABIERTAS.md` D13). El contenido SRD que se migre al `compendio/` está bajo OGL 1.0a / CC-BY 4.0 según la versión y deberá llevar `compendio/LICENSE` explícito.
+Código bajo **Apache-2.0** (ver [`LICENSE`](LICENSE) y ADR-0013 en `docs/decisiones/`). El contenido SRD que se migre al `compendio/` llevará **licencia separada** (`compendio/LICENSE`, OGL 1.0a / CC-BY 4.0 según versión) y no se migrará nada hasta que ese archivo exista.
 
 ## Inspirado en
 

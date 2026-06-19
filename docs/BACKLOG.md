@@ -60,9 +60,10 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 
 ## F2 — Núcleo CLI jugable mínimo
 
-### #F2-01 — Cliente LLM OpenAI-compatible (sync + streaming)
+### #F2-01 — Cliente LLM OpenAI-compatible (sync + streaming) — ✅ PARCIAL (F2.1)
 - **Aceptación.** Soporta `chat/completions` con `tools`, parametrizable por perfil.
-- **Tests.** mock con `responses`/`httpx_mock`.
+- **Estado.** Sync **hecho** (`src/dm_agent/llm/cliente.py`, `ClienteLLM`): carga de config, resolución de perfil/endpoint, `chat()` con/sin tools, parseo de `tool_calls` sin ejecutarlas, API key opcional vía env, errores tipados. **Streaming pendiente** (`stream=True` → `NotImplementedError`); se completará junto a F2.2.
+- **Tests.** `tests/test_cliente_llm.py` con `httpx.MockTransport` (sin red). Smoke opcional: `scripts/check_llm_mock.py`.
 - **P.** P0.
 
 ### #F2-02 — Bucle del agente sin tools

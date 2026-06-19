@@ -2,6 +2,20 @@
 
 > Hardware del usuario: **RTX 5090 (24+ GB VRAM)** + **Mac Studio M2 Ultra (128 GB unified RAM)**.
 
+## Modelos en uso (decisión del usuario)
+
+Para impulsar el proyecto se usarán, según disponibilidad:
+
+| Modelo | Tipo | Rol previsto | Notas |
+|---|---|---|---|
+| **Qwen3.6 27B** | Denso | Perfil `grande`/`rapido` según hardware | Buena calidad general; candidato a narración y generación. |
+| **Qwen3.6 35B-A3B** | MoE (≈3B activos) | Perfil `rapido` para juego en vivo | MoE: gran capacidad con coste de inferencia bajo (solo ~3B parámetros activos por token), ideal para latencia baja en turno. |
+
+> Estos sustituyen a los Qwen 2.5 que aparecen como ejemplo en los perfiles más abajo.
+> Antes de fijarlos en `config/perfiles.json` hay que confirmar el nombre exacto del
+> modelo que expone cada endpoint (`/models`) y validar tool-calling con el backend real
+> (Fase 2 / F9).
+
 ## Filosofía
 
 dm-agent debe usar **al menos dos endpoints simultáneos**:
