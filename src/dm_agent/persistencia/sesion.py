@@ -23,6 +23,11 @@ def _ahora() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _recorta(texto: str, limite: int) -> str:
+    texto = " ".join(str(texto).split())
+    return texto if len(texto) <= limite else texto[: limite - 1].rstrip() + "…"
+
+
 def _id_por_defecto() -> str:
     # Ordenable lexicográficamente => la "última" sesión es la de id mayor.
     return datetime.now(UTC).strftime("sesion-%Y%m%d-%H%M%S")
@@ -109,3 +114,30 @@ class Sesion:
 
     def __len__(self) -> int:
         return len(self.historial())
+
+    def texto_para_resumen(self, max_chars_por_registro: int = 600) -> str:
+        """Convierte el historial en texto legible para resumir/cerrar sesión.
+
+        No vuelca el JSON bruto: traduce cada registro a una línea
+        (`Usuario:`, `DM:`, `Tool ...`, `Resultado ...`) y trunca lo muy largo.
+        """
+        lineas: list[str] = []
+        for ev in self.historial():
+            tipo = ev.get("tipo")
+            if tipo == "user":
+                lineas.append(f"Usuario: {_recorta(ev.get('content', ''), max_chars_por_registro)}")
+            elif tipo == "assistant":
+                contenido = ev.get("content")
+                if contenido:
+                    lineas.append(f"DM: {_recorta(contenido, max_chars_por_registro)}")
+            elif tipo == "tool_call":
+                nombre = ev.get("nombre_api", "?")
+                args = ev.get("argumentos", {})
+                lineas.append(f"Tool {nombre}: {_recorta(str(args), max_chars_por_registro)}")
+            elif tipo == "tool_result":
+                nombre = ev.get("nombre_api", "?")
+                res = ev.get("resultado", {})
+                lineas.append(
+                    f"Resultado {nombre}: {_recorta(str(res), max_chars_por_registro)}"
+                )
+        return "\n".join(lineas)

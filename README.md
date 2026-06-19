@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-**Fase 0–1 + F1.1 + F2.1 + F2.2 + F3.1–F3.6 + F4.1–F4.3**: análisis, esqueleto, repo preparado, cliente LLM, **REPL mínima jugable**, **esquemas base de estado** (`Ficha`, `EstadoPartida`, `Evento`), **persistencia JSON** (`GestorEstado`), **tools `ficha.*` / `hp_xp.*` / `inventario.*`** con **eventos auditables unificados**, **memoria narrativa** (`narrativa.*`), **resúmenes con LLM** (`resumen.*`) e **inyección automática de memoria narrativa reciente al contexto** del agente (último resumen + entradas recientes como mensaje `system`). El agente ya recuerda la continuidad de la campaña en cada turno, pero **aún no tiene RAG, memoria vectorial ni entidades estructuradas**, ni economía, combate, reglas completas o streaming: no es una campaña completa.
+**Fase 0–1 + F1.1 + F2.1 + F2.2 + F3.1–F3.6 + F4.1–F4.4**: análisis, esqueleto, repo preparado, cliente LLM, **REPL mínima jugable**, **esquemas base de estado** (`Ficha`, `EstadoPartida`, `Evento`), **persistencia JSON** (`GestorEstado`), **tools `ficha.*` / `hp_xp.*` / `inventario.*`** con **eventos auditables unificados**, **memoria narrativa** (`narrativa.*`), **resúmenes con LLM** (`resumen.*`), **inyección automática de memoria al contexto** y **cierre de sesión** (`sesion.*` + comando `/cerrar`: resumen de cierre + punto de arranque de la próxima). El agente ya puede cerrar una sesión generando resumen y preparación, y recordarlos al continuar, pero **aún no tiene RAG, memoria vectorial, entidades estructuradas, economía, combate, reglas completas, streaming ni cierre automático al salir**: no es una campaña completa.
 
 `dm-agent` usa D&D 5.5 como base pero lo **adapta** a juego narrativo en solitario / teatro de la mente (ver [`docs/REGLAS_ADAPTADAS.md`](docs/REGLAS_ADAPTADAS.md) y [ADR-0017](docs/decisiones/0017-dnd55-narrativo-solitario.md)); esa adaptación es por ahora solo diseño.
 
@@ -88,6 +88,8 @@ dm-agent --continuar              # retoma última sesión
 | [`docs/tools/resumen.md`](docs/tools/resumen.md) | Tools `resumen.*` (resúmenes narrativos con LLM). |
 | [`docs/memoria/resumenes.md`](docs/memoria/resumenes.md) | Resúmenes narrativos (generación y persistencia). |
 | [`docs/memoria/contexto.md`](docs/memoria/contexto.md) | Inyección de memoria narrativa al contexto del agente. |
+| [`docs/memoria/cierre_sesion.md`](docs/memoria/cierre_sesion.md) | Cierre y preparación de sesión (`/cerrar`). |
+| [`docs/tools/sesion.md`](docs/tools/sesion.md) | Tools `sesion.*` (cierre de sesión). |
 | [`docs/estado/eventos.md`](docs/estado/eventos.md) | Eventos auditables JSONL por campaña. |
 | [`docs/REGLAS_ADAPTADAS.md`](docs/REGLAS_ADAPTADAS.md) | D&D 5.5 adaptado a solitario / teatro de la mente (D17). |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Issues iniciales. |

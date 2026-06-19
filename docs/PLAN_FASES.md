@@ -102,12 +102,13 @@ Subfases:
 - **F4.1 — Bitácora narrativa + memoria narrativa básica.** ✅ **Implementada** (commit `feat: add narrative memory log`). `EntradaNarrativa`, `GestorMemoriaNarrativa` (JSONL + Markdown append-only) y tools `narrativa.{registrar,reciente}`. Sin resumen LLM ni inyección automática.
 - **F4.2 — Resumen de escena/sesión con LLM.** ✅ **Implementada** (commit `feat: add narrative summarization tools`). `ResumidorNarrativo` + tools `resumen.{entradas,texto}` + prompt fijo `resumen_narrativo.md`; guardan `EntradaNarrativa(tipo="resumen")`. Sin inyección automática.
 - **F4.3 — Inyección de memoria narrativa en el contexto del agente.** ✅ **Implementada** (commit `feat: inject narrative memory into agent context`). `ConstructorContextoMemoria` + inyección como 2º mensaje `system` en `AgenteDM`; config `memoria` + `campaña_activa` en `proyecto.json`. Sin RAG ni entidades estructuradas.
+- **F4.4 — Cierre y preparación de sesión.** ✅ **Implementada** (commit `feat: add session closing flow`). `CierreSesionNarrativa` + tools `sesion.{cerrar,cerrar_texto}` + prompt `cierre_sesion.md` + comando REPL `/cerrar`. Genera resumen de cierre + preparación de la próxima sesión (entradas `resumen` y `siguiente_sesion`, enlazadas por `campaña_id`/`sesion_id`).
 
-**Archivos.** `esquemas/narrativa.py` + `memoria/narrativa.py` + `herramientas/narrativa.py` ✅ F4.1; `memoria/resumen.py` + `herramientas/resumen.py` + `prompts/resumen_narrativo.md` ✅ F4.2; `memoria/contexto.py` + integración en `nucleo/agente.py` ✅ F4.3.
+**Archivos.** `esquemas/narrativa.py` + `memoria/narrativa.py` + `herramientas/narrativa.py` ✅ F4.1; `memoria/resumen.py` + `herramientas/resumen.py` + `prompts/resumen_narrativo.md` ✅ F4.2; `memoria/contexto.py` + integración en `nucleo/agente.py` ✅ F4.3; `memoria/cierre_sesion.py` + `herramientas/sesion.py` + `prompts/cierre_sesion.md` + `/cerrar` ✅ F4.4.
 
-**Tests.** F4.1 + F4.2 + `tests/test_contexto_memoria.py`, `tests/test_agente_memoria.py` ✅ F4.3.
+**Tests.** F4.1 + F4.2 + `tests/test_contexto_memoria.py`, `tests/test_agente_memoria.py` ✅ F4.3; `tests/test_cierre_sesion.py`, `tests/test_tools_sesion.py` ✅ F4.4.
 
-**Definición de hecho.** Tras cerrar y reabrir, una partida puede continuar con contexto coherente. ✅ La memoria narrativa reciente (último resumen + entradas) se inyecta automáticamente en cada turno. *Pendiente: resumen/preparación automáticos al cerrar sesión (F4.4) y RAG.*
+**Definición de hecho.** Tras cerrar y reabrir, una partida puede continuar con contexto coherente. ✅ La memoria narrativa reciente se inyecta automáticamente (F4.3) y el cierre de sesión (F4.4) deja resumen + punto de arranque que se recuperan en la próxima. *Pendiente: prueba integrada real (F4.5), cierre automático al salir y RAG.*
 
 ---
 

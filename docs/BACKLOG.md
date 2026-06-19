@@ -115,7 +115,9 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Estado.** `memoria/resumen.py` (`ResumidorNarrativo`: `resumir_texto`/`resumir_entradas`), tools `resumen.{entradas,texto}` (`herramientas/resumen.py`), prompt fijo `prompts/resumen_narrativo.md`. Guardan `EntradaNarrativa(tipo="resumen", importancia=5, origen="resumen")`. Registradas en el agente. Docs: `docs/memoria/resumenes.md`, `docs/tools/resumen.md`. Tests con mock LLM: `tests/test_resumen_memoria.py`, `tests/test_tools_resumen.py`. Sin inyección automática (F4.3).
 ### #F4-03 — Inyección de memoria narrativa en contexto del agente — ✅ HECHO (F4.3)
 - **Estado.** `memoria/contexto.py` (`ConstructorContextoMemoria.construir_bloque_memoria`): último resumen + N entradas recientes no-resumen → bloque Markdown compacto. `AgenteDM` lo inyecta como 2º mensaje `system` (antes del historial/usuario, sin sustituir el base) cuando hay constructor + campaña. Config `memoria` (`inyectar_narrativa`/`limite_entradas_contexto`/`incluir_resumenes`) y `campaña_activa` en `proyecto.json` (defaults seguros; campaña por defecto `campana_demo`). Docs: `docs/memoria/contexto.md`. Tests: `tests/test_contexto_memoria.py`, `tests/test_agente_memoria.py`. No es RAG ni memoria vectorial.
-### #F4-04 — Skill `preparar-siguiente`
+### #F4-04 — Cierre y preparación de sesión — ✅ HECHO (F4.4)
+- **Estado.** `memoria/cierre_sesion.py` (`CierreSesionNarrativa.cerrar_sesion`): genera resumen de cierre + preparación de próxima sesión y guarda dos entradas (`resumen` + `siguiente_sesion`) con mismo `campaña_id`/`sesion_id`. Prompt `prompts/cierre_sesion.md` (parseo por encabezados + degradación documentada). Tools `sesion.{cerrar,cerrar_texto}` (`herramientas/sesion.py`); `Sesion.texto_para_resumen()`. Comando REPL `/cerrar`. Docs: `docs/memoria/cierre_sesion.md`, `docs/tools/sesion.md`. Tests: `tests/test_cierre_sesion.py`, `tests/test_tools_sesion.py`.
+- **Pendiente:** prueba integrada real (F4.5); cierre automático al salir; selector de campaña.
 - **P.** P1.
 
 ---

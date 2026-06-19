@@ -21,7 +21,9 @@ from dm_agent.herramientas.inventario import crear_tools_inventario
 from dm_agent.herramientas.narrativa import crear_tools_narrativa
 from dm_agent.herramientas.registro import RegistroHerramientas
 from dm_agent.herramientas.resumen import crear_tools_resumen
+from dm_agent.herramientas.sesion import crear_tools_sesion
 from dm_agent.llm.cliente import ClienteLLM, ErrorLLM
+from dm_agent.memoria.cierre_sesion import CierreSesionNarrativa, ErrorCierre
 from dm_agent.memoria.contexto import ConstructorContextoMemoria
 from dm_agent.memoria.narrativa import GestorMemoriaNarrativa
 from dm_agent.memoria.resumen import ResumidorNarrativo
@@ -38,6 +40,7 @@ COMANDOS = {
     "/guardar": "fuerza el guardado de la sesión",
     "/continuar": "muestra la sesión activa (id y nº de registros)",
     "/nueva": "crea una sesión nueva",
+    "/cerrar": "cierra la sesión: resumen + preparación de la próxima",
     "/debug": "activa/desactiva la traza de depuración",
 }
 
@@ -54,6 +57,8 @@ def _crear_registro(
     registro_eventos: RegistroEventosEstado,
     memoria_narrativa: GestorMemoriaNarrativa,
     resumidor: ResumidorNarrativo,
+    cierre: CierreSesionNarrativa,
+    dir_sesiones: Path,
 ) -> RegistroHerramientas:
     registro = RegistroHerramientas()
     registro.registrar(crear_tool_dados())
@@ -66,6 +71,8 @@ def _crear_registro(
     for tool in crear_tools_narrativa(memoria_narrativa):
         registro.registrar(tool)
     for tool in crear_tools_resumen(resumidor):
+        registro.registrar(tool)
+    for tool in crear_tools_sesion(cierre, dir_sesiones):
         registro.registrar(tool)
     return registro
 
@@ -113,8 +120,14 @@ class SesionInteractiva:
         self.registro_eventos = RegistroEventosEstado(raiz_storage)
         self.memoria_narrativa = GestorMemoriaNarrativa(raiz_storage)
         self.resumidor = ResumidorNarrativo(self.cliente, self.memoria_narrativa)
+        self.cierre = CierreSesionNarrativa(self.cliente, self.memoria_narrativa)
         self.registro = _crear_registro(
-            self.gestor, self.registro_eventos, self.memoria_narrativa, self.resumidor
+            self.gestor,
+            self.registro_eventos,
+            self.memoria_narrativa,
+            self.resumidor,
+            self.cierre,
+            self.dir_sesiones,
         )
         self.system_prompt = cargar_prompt(SYSTEM_DM_MINIMO)
 
@@ -186,6 +199,25 @@ class SesionInteractiva:
         assert self.agente is not None
         return self.agente.responder(texto)
 
+    def cerrar_sesion(self) -> str:
+        """Cierra la sesión activa: genera resumen + preparación con el LLM."""
+        if self.sesion is None:
+            return "No hay sesión activa que cerrar."
+        texto = self.sesion.texto_para_resumen()
+        if not texto.strip():
+            return "La sesión activa no tiene contenido que cerrar todavía."
+        try:
+            entradas = self.cierre.cerrar_sesion(self.campaña_id, self.sesion.id, texto)
+        except ErrorCierre as e:
+            return f"No se pudo cerrar la sesión: {e}"
+        except ErrorLLM as e:
+            return f"[error del modelo/endpoint] {e}"
+        return (
+            f"Sesión {self.sesion.id} cerrada.\n\n"
+            f"== Resumen de cierre ==\n{entradas['resumen'].contenido}\n\n"
+            f"== Punto de arranque de la próxima ==\n{entradas['preparacion'].contenido}"
+        )
+
 
 def repl(
     ctx: Any,
@@ -226,6 +258,9 @@ def repl(
             continue
         if texto == "/nueva":
             escribir(ctx.nueva_sesion())
+            continue
+        if texto == "/cerrar":
+            escribir(ctx.cerrar_sesion())
             continue
         if texto == "/debug":
             escribir(ctx.alternar_debug())
