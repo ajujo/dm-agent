@@ -92,7 +92,9 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Pendiente F3.5:** unificar los dos `Evento` (`nucleo.eventos` dataclass runtime + `esquemas.evento` pydantic persistible).
 ### #F3-01 — Tools `ficha.*` (sobre esquema `Ficha`) — ✅ HECHO (F3.3)
 - **Estado.** `src/dm_agent/herramientas/ficha.py`: `ficha.{leer,guardar,validar,actualizar,listar}` (API `ficha_*`), apoyadas en `GestorEstado` + validación `Ficha`. Registradas en el agente vía `bucle._crear_registro`. Errores controlados (sin tracebacks al LLM). Docs: `docs/tools/ficha.md`. Tests: `tests/test_tools_ficha.py`. Sin HP/XP semántico ni edición profunda.
-### #F3-02 — Tools `hp_xp.*` (sobre `Ficha`/`EstadoPartida`)  ⏳ F3.4
+### #F3-02 — Tools `hp_xp.*` + eventos auditables — ✅ HECHO (F3.4)
+- **Estado.** `src/dm_agent/herramientas/hp_xp.py`: `hp_xp.{aplicar_daño,aplicar_curacion,otorgar_xp,consultar_estado_vital}` (API `hp_xp_aplicar_dano`, …; ñ→n transliterada). Cargan/validan/guardan vía `GestorEstado`+`Ficha`; cada escritura registra `Evento` en `eventos.jsonl` (`src/dm_agent/estado/eventos.py`, `RegistroEventosEstado`). Registradas en el agente. Docs: `docs/tools/hp_xp.md`, `docs/estado/eventos.md`. Tests: `tests/test_tools_hp_xp.py`.
+- **Pendiente F3.5:** unificar `nucleo.eventos.Evento` (runtime) y `esquemas.evento.Evento` (persistible).
 ### #F3-03 — Tools `inventario.*`
 ### #F3-04 — Tools `condiciones.*`
 ### #F3-05 — Bus de eventos + logger append-only JSONL  ⏳ F3.5

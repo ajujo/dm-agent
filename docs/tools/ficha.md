@@ -90,6 +90,15 @@ Las tools devuelven el contrato estándar `ResultadoHerramienta`
 convierten a `ok:false` + `errores` legibles; **nunca** se propaga un traceback
 al LLM.
 
+## `ficha.actualizar` vs `hp_xp.*`
+
+`ficha.actualizar` es una herramienta **genérica/administrativa** (crear/corregir
+datos de ficha). Desde F3.4, los cambios **mecánicos** de juego —daño, curación,
+XP— deben hacerse con las tools [`hp_xp.*`](./hp_xp.md), que además registran un
+evento auditable. Aunque `ficha.actualizar` técnicamente aún permite tocar
+`hp_actual`/`hp_max`/`xp`, no es la vía correcta cuando el agente dirige la
+partida.
+
 ## Limitaciones (F3.3)
 
 - No hay HP/XP **semántico** (daño, curación, otorgar XP, subida de nivel): eso

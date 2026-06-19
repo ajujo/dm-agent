@@ -21,15 +21,23 @@ detecta colisiones (dos nombres internos que producirían el mismo nombre API).
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
 
 from dm_agent.herramientas.base import Herramienta, ResultadoHerramienta
 
-# Nombre interno: segmentos seguros separados por puntos. P. ej. `dados.tirar`,
-# `combate.iniciar_combate`, o un único segmento `dados_tirar`.
-_REGEX_NOMBRE_INTERNO = re.compile(r"^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$")
-# Nombre API válido para endpoints OpenAI-compatible.
+# Nombre interno: segmentos de "palabra" (incl. letras Unicode del dominio en
+# español, p. ej. `daño`, `campaña`) separados por puntos. `\w` con patrones str
+# es Unicode por defecto. P. ej. `dados.tirar`, `hp_xp.aplicar_daño`.
+_REGEX_NOMBRE_INTERNO = re.compile(r"^\w+(\.\w+)*$")
+# Nombre API válido para endpoints OpenAI-compatible: solo ASCII seguro.
 _REGEX_NOMBRE_API = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _a_ascii(texto: str) -> str:
+    """Translitera a ASCII quitando diacríticos (ñ→n, á→a, …)."""
+    nfkd = unicodedata.normalize("NFKD", texto)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
 class HerramientaNoRegistrada(KeyError):
@@ -49,16 +57,18 @@ class ColisionNombreApi(ValueError):
 
 
 def nombre_interno_a_api(nombre: str) -> str:
-    """Convierte un nombre interno (`dados.tirar`) a un nombre API seguro
-    (`dados_tirar`). Lanza `NombreHerramientaInvalido` si el nombre interno
-    no cumple el formato esperado o si el resultado no es válido para la API.
+    """Convierte un nombre interno (`dados.tirar`, `hp_xp.aplicar_daño`) a un
+    nombre API seguro para endpoints OpenAI-compatible (`dados_tirar`,
+    `hp_xp_aplicar_dano`): translitera diacríticos a ASCII y reemplaza puntos por
+    guiones bajos. Lanza `NombreHerramientaInvalido` si el nombre interno no
+    cumple el formato o si el resultado no es válido para la API.
     """
     if not _REGEX_NOMBRE_INTERNO.match(nombre):
         raise NombreHerramientaInvalido(
             f"nombre interno inválido: {nombre!r} "
-            "(se esperan segmentos [A-Za-z0-9_] separados por puntos)"
+            "(se esperan segmentos de palabra separados por puntos)"
         )
-    api = nombre.replace(".", "_")
+    api = _a_ascii(nombre).replace(".", "_")
     if not _REGEX_NOMBRE_API.match(api):
         raise NombreHerramientaInvalido(
             f"nombre API resultante inválido: {api!r} (límite 64 chars, [A-Za-z0-9_-])"

@@ -4,6 +4,7 @@ F3.2: `GestorEstado` (persistencia JSON de `Ficha`/`EstadoPartida` con escritura
 atómica y snapshots opcionales). Las tools que lo manipulan llegan en F3.3+.
 """
 
+from dm_agent.estado.eventos import RegistroEventosEstado
 from dm_agent.estado.gestor import (
     ErrorEstado,
     ErrorEstadoInvalido,
@@ -16,4 +17,5 @@ __all__ = [
     "ErrorEstadoInvalido",
     "ErrorEstadoNoEncontrado",
     "GestorEstado",
+    "RegistroEventosEstado",
 ]
