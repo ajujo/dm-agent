@@ -12,7 +12,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from dm_agent.estado.gestor import GestorEstado
 from dm_agent.herramientas.dados import crear_tool_dados
+from dm_agent.herramientas.ficha import crear_tools_ficha
 from dm_agent.herramientas.registro import RegistroHerramientas
 from dm_agent.llm.cliente import ClienteLLM, ErrorLLM
 from dm_agent.nucleo.agente import AgenteDM
@@ -39,16 +41,22 @@ def _texto_ayuda() -> str:
     return "\n".join(lineas)
 
 
-def _crear_registro() -> RegistroHerramientas:
+def _crear_registro(gestor: GestorEstado) -> RegistroHerramientas:
     registro = RegistroHerramientas()
     registro.registrar(crear_tool_dados())
+    for tool in crear_tools_ficha(gestor):
+        registro.registrar(tool)
     return registro
 
 
-def _dir_sesiones(proyecto: dict[str, Any], config_dir: Path) -> Path:
+def _raiz_storage(proyecto: dict[str, Any], config_dir: Path) -> Path:
     storage = proyecto.get("rutas", {}).get("storage", "./storage")
     raiz = config_dir.resolve().parent
-    return (raiz / storage / "sesiones").resolve()
+    return (raiz / storage).resolve()
+
+
+def _dir_sesiones(proyecto: dict[str, Any], config_dir: Path) -> Path:
+    return _raiz_storage(proyecto, config_dir) / "sesiones"
 
 
 class SesionInteractiva:
@@ -79,7 +87,8 @@ class SesionInteractiva:
         self.cliente = ClienteLLM.desde_config(
             self.perfil, config_dir=self.config_dir, http_client=http_client
         )
-        self.registro = _crear_registro()
+        self.gestor = GestorEstado(_raiz_storage(self.proyecto, self.config_dir))
+        self.registro = _crear_registro(self.gestor)
         self.system_prompt = cargar_prompt(SYSTEM_DM_MINIMO)
 
         self.sesion: Sesion | None = None

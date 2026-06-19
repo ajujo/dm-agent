@@ -90,7 +90,8 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 ### #F3-00b — GestorEstado JSON + snapshots — ✅ HECHO (F3.2)
 - **Estado.** `src/dm_agent/estado/gestor.py` (`GestorEstado`): guardar/cargar `Ficha` y `EstadoPartida`, listar fichas, escritura atómica (tmp+replace), snapshots opcionales, errores tipados (`ErrorEstado{,NoEncontrado,Invalido}`). Docs: `docs/estado/gestor_estado.md`. Tests: `tests/test_gestor_estado.py`.
 - **Pendiente F3.5:** unificar los dos `Evento` (`nucleo.eventos` dataclass runtime + `esquemas.evento` pydantic persistible).
-### #F3-01 — Tools `ficha.*` (sobre esquema `Ficha`)  ⏳ F3.3
+### #F3-01 — Tools `ficha.*` (sobre esquema `Ficha`) — ✅ HECHO (F3.3)
+- **Estado.** `src/dm_agent/herramientas/ficha.py`: `ficha.{leer,guardar,validar,actualizar,listar}` (API `ficha_*`), apoyadas en `GestorEstado` + validación `Ficha`. Registradas en el agente vía `bucle._crear_registro`. Errores controlados (sin tracebacks al LLM). Docs: `docs/tools/ficha.md`. Tests: `tests/test_tools_ficha.py`. Sin HP/XP semántico ni edición profunda.
 ### #F3-02 — Tools `hp_xp.*` (sobre `Ficha`/`EstadoPartida`)  ⏳ F3.4
 ### #F3-03 — Tools `inventario.*`
 ### #F3-04 — Tools `condiciones.*`

@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-**Fase 0–1 + F1.1 + F2.1 + F2.2 + F3.1 + F3.2**: análisis, esqueleto, repo preparado, cliente LLM, **REPL mínima jugable**, **esquemas base de estado** (`Ficha`, `EstadoPartida`, `Evento`) y **persistencia JSON** de esos esquemas (`GestorEstado`, con escritura atómica y snapshots opcionales). Primer chat CLI funcional con un LLM local y dados reales — pero **todavía no es una campaña completa**: F3.2 solo persiste esquemas; **aún no hay tools de ficha, HP/XP, combate, inventario, reglas adaptadas, RAG ni memoria avanzada**, y el REPL sigue manejando solo historial narrativo (no usa aún el `GestorEstado`).
+**Fase 0–1 + F1.1 + F2.1 + F2.2 + F3.1 + F3.2 + F3.3**: análisis, esqueleto, repo preparado, cliente LLM, **REPL mínima jugable**, **esquemas base de estado** (`Ficha`, `EstadoPartida`, `Evento`), **persistencia JSON** (`GestorEstado`) y **tools `ficha.*`** (leer/guardar/validar/actualizar/listar) disponibles para el agente. El agente ya dispone de tools para persistir y modificar fichas (con validación y guardado seguro) — pero **aún no existe motor de HP/XP, combate ni reglas**: no hay HP/XP semántico, inventario complejo, reglas adaptadas, RAG ni memoria avanzada. Sigue sin ser una campaña completa.
 
 `dm-agent` usa D&D 5.5 como base pero lo **adapta** a juego narrativo en solitario / teatro de la mente (ver [`docs/REGLAS_ADAPTADAS.md`](docs/REGLAS_ADAPTADAS.md) y [ADR-0017](docs/decisiones/0017-dnd55-narrativo-solitario.md)); esa adaptación es por ahora solo diseño.
 
@@ -80,6 +80,7 @@ dm-agent --continuar              # retoma última sesión
 | [`docs/PRUEBA_MANUAL_F2.md`](docs/PRUEBA_MANUAL_F2.md) | Cómo validar la REPL contra un endpoint local. |
 | [`docs/esquemas/`](docs/esquemas/) | Esquemas de datos: ficha, estado de partida, evento. |
 | [`docs/estado/gestor_estado.md`](docs/estado/gestor_estado.md) | Persistencia JSON de estado (GestorEstado). |
+| [`docs/tools/ficha.md`](docs/tools/ficha.md) | Tools `ficha.*` (leer/guardar/validar/actualizar/listar). |
 | [`docs/REGLAS_ADAPTADAS.md`](docs/REGLAS_ADAPTADAS.md) | D&D 5.5 adaptado a solitario / teatro de la mente (D17). |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Issues iniciales. |
 | [`docs/RIESGOS.md`](docs/RIESGOS.md) | Riesgos técnicos y mitigaciones. |
