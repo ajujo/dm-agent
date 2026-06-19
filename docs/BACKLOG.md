@@ -95,7 +95,8 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Estado.** `src/dm_agent/herramientas/hp_xp.py`: `hp_xp.{aplicar_daño,aplicar_curacion,otorgar_xp,consultar_estado_vital}` (API `hp_xp_aplicar_dano`, …; ñ→n transliterada). Cargan/validan/guardan vía `GestorEstado`+`Ficha`; cada escritura registra `Evento` en `eventos.jsonl` (`src/dm_agent/estado/eventos.py`, `RegistroEventosEstado`). Registradas en el agente. Docs: `docs/tools/hp_xp.md`, `docs/estado/eventos.md`. Tests: `tests/test_tools_hp_xp.py`.
 ### #F3-02b — Unificación del modelo de `Evento` — ✅ HECHO (F3.5)
 - **Estado.** Modelo canónico único `esquemas.evento.Evento`; `nucleo.eventos` lo re-exporta y el bus lo publica; `dados.tirar` migrado a `crear_evento` (`semilla` → `datos`). Cierra el bloque de estado mecánico mínimo (ficha + HP/XP + eventos). Tests: `tests/test_eventos_unificados.py`. Docs: `docs/estado/eventos.md`.
-### #F3-03 — Tools `inventario.*`  ⏳ (propuesto F3.6)
+### #F3-03 — Tools `inventario.*` — ✅ HECHO (F3.6)
+- **Estado.** `src/dm_agent/herramientas/inventario.py`: `inventario.{listar,añadir,quitar,equipar,desequipar}` (API `inventario_listar`/`inventario_anadir`/…; ñ→n). Sobre `Ficha.inventario`; validan/guardan vía `GestorEstado`+`Ficha`; cada mutación registra `Evento` (`objeto_añadido/quitado/equipado/desequipado`). Registradas en el agente. Docs: `docs/tools/inventario.md`. Tests: `tests/test_tools_inventario.py`. Sin peso/oro/slots/equipo complejo.
 ### #F3-04 — Tools `condiciones.*`
 ### #F3-05 — Bus de eventos como vía única de persistencia (subscriber) — parcial
 - **Estado.** Bus runtime canónico disponible; aún no es la vía única (las tools persisten directo vía `RegistroEventosEstado`). Deuda menor.

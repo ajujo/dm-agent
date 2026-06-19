@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-**Fase 0–1 + F1.1 + F2.1 + F2.2 + F3.1–F3.5**: análisis, esqueleto, repo preparado, cliente LLM, **REPL mínima jugable**, **esquemas base de estado** (`Ficha`, `EstadoPartida`, `Evento`), **persistencia JSON** (`GestorEstado`), **tools `ficha.*`** y **tools `hp_xp.*`** (daño/curación/XP/estado vital) con **eventos auditables JSONL** y un **modelo de eventos unificado** (F3.5). El proyecto ya tiene un modelo de eventos auditable unificado para la mecánica mínima: ficha, HP y XP. Pero **aún no hay combate, inventario, reglas completas ni campaña completa**: no hay reglas adaptadas, RAG, memoria avanzada ni streaming.
+**Fase 0–1 + F1.1 + F2.1 + F2.2 + F3.1–F3.6**: análisis, esqueleto, repo preparado, cliente LLM, **REPL mínima jugable**, **esquemas base de estado** (`Ficha`, `EstadoPartida`, `Evento`), **persistencia JSON** (`GestorEstado`), **tools `ficha.*`**, **tools `hp_xp.*`** (daño/curación/XP/estado vital), **tools `inventario.*`** (inventario simple) y un **modelo de eventos unificado** con auditoría JSONL. El agente ya gestiona ficha, HP/XP e inventario simple mediante tools auditables. Pero **aún no existe economía, carga, slots, combate ni reglas completas**: no hay reglas adaptadas, RAG, memoria avanzada ni streaming. Sigue sin ser una campaña completa.
 
 `dm-agent` usa D&D 5.5 como base pero lo **adapta** a juego narrativo en solitario / teatro de la mente (ver [`docs/REGLAS_ADAPTADAS.md`](docs/REGLAS_ADAPTADAS.md) y [ADR-0017](docs/decisiones/0017-dnd55-narrativo-solitario.md)); esa adaptación es por ahora solo diseño.
 
@@ -82,6 +82,7 @@ dm-agent --continuar              # retoma última sesión
 | [`docs/estado/gestor_estado.md`](docs/estado/gestor_estado.md) | Persistencia JSON de estado (GestorEstado). |
 | [`docs/tools/ficha.md`](docs/tools/ficha.md) | Tools `ficha.*` (leer/guardar/validar/actualizar/listar). |
 | [`docs/tools/hp_xp.md`](docs/tools/hp_xp.md) | Tools `hp_xp.*` (daño/curación/XP/estado vital). |
+| [`docs/tools/inventario.md`](docs/tools/inventario.md) | Tools `inventario.*` (inventario simple). |
 | [`docs/estado/eventos.md`](docs/estado/eventos.md) | Eventos auditables JSONL por campaña. |
 | [`docs/REGLAS_ADAPTADAS.md`](docs/REGLAS_ADAPTADAS.md) | D&D 5.5 adaptado a solitario / teatro de la mente (D17). |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Issues iniciales. |

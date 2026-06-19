@@ -17,6 +17,7 @@ from dm_agent.estado.gestor import GestorEstado
 from dm_agent.herramientas.dados import crear_tool_dados
 from dm_agent.herramientas.ficha import crear_tools_ficha
 from dm_agent.herramientas.hp_xp import crear_tools_hp_xp
+from dm_agent.herramientas.inventario import crear_tools_inventario
 from dm_agent.herramientas.registro import RegistroHerramientas
 from dm_agent.llm.cliente import ClienteLLM, ErrorLLM
 from dm_agent.nucleo.agente import AgenteDM
@@ -51,6 +52,8 @@ def _crear_registro(
     for tool in crear_tools_ficha(gestor):
         registro.registrar(tool)
     for tool in crear_tools_hp_xp(gestor, registro_eventos):
+        registro.registrar(tool)
+    for tool in crear_tools_inventario(gestor, registro_eventos):
         registro.registrar(tool)
     return registro
 
