@@ -1,0 +1,183 @@
+# Plan de implementación por fases
+
+> Política: ninguna fase se da por terminada sin **tests pasando** y documentación actualizada. Prohibido saltar fases.
+
+---
+
+## Fase 0 — Análisis (HECHO)
+
+**Objetivo.** Documentar Hermes y dnd5e-framework, decidir qué se reutiliza.
+
+**Entregables.**
+- `docs/ANALISIS_HERMES.md` ✓
+- `docs/ANALISIS_DND5E.md` ✓
+- `docs/ARQUITECTURA.md` (visión general) ✓
+- `docs/PLAN_FASES.md` (este archivo) ✓
+- `docs/BACKLOG.md` ✓
+- `docs/RIESGOS.md`, `docs/DECISIONES_ABIERTAS.md`, `docs/MODELOS_LOCALES.md` ✓
+
+**Definición de hecho.** Documentos revisados y comprometidos.
+
+---
+
+## Fase 1 — Esqueleto del proyecto
+
+**Objetivo.** Repo navegable con estructura final, instalable en `conda env rpg`, con test de humo.
+
+**Archivos a crear.**
+- `pyproject.toml`, `README.md`, `AGENTS.md`, `.gitignore`, `.editorconfig`, `Makefile`.
+- `config/proyecto.json`, `config/modelos.json`, `config/perfiles.json`.
+- `src/dm_agent/__init__.py`, `__main__.py`, `cli.py`.
+- `src/dm_agent/nucleo/{__init__,agente,bucle,contexto,eventos,logger}.py` (stubs).
+- `src/dm_agent/herramientas/{__init__,base,registro,dados}.py` (dados es real).
+- `src/dm_agent/skills/{__init__,cargador,router}.py` (cargador funcional mínimo).
+- `src/dm_agent/{memoria,estado,llm,esquemas,reglas,rag,narrativa}/__init__.py` con stubs.
+- `tests/{conftest.py,test_smoke.py,test_dados.py,test_registro.py,test_skills_loader.py}`.
+- `skills/ejemplo-escena-social/SKILL.md`.
+
+**Tests.**
+- `test_smoke`: importa el paquete.
+- `test_dados`: tirada determinista con semilla.
+- `test_registro`: registrar y dispatchar tool.
+- `test_skills_loader`: descubre la skill de ejemplo y parsea frontmatter.
+
+**Definición de hecho.** `conda activate rpg && pip install -e . && pytest` pasa al 100%.
+
+**Riesgos.** Mezclar conda/pip; documentado en AGENTS.md.
+
+---
+
+## Fase 2 — Núcleo CLI jugable mínimo
+
+**Objetivo.** `dm-agent` arranca, conecta a un endpoint OpenAI-compatible, mantiene una sesión con guardado.
+
+**Archivos.**
+- `src/dm_agent/llm/cliente.py` (cliente OpenAI-compatible streaming).
+- `src/dm_agent/nucleo/bucle.py` (loop minimalista user↔LLM, sin tools aún).
+- `src/dm_agent/cli.py` (REPL con `/ayuda`, `/guardar`, `/salir`).
+- `src/dm_agent/persistencia/sesion.py`.
+
+**Tests.**
+- `test_cliente_llm.py` mock del endpoint.
+- `test_sesion.py` guardar/cargar.
+
+**Definición de hecho.** Sesión interactiva real contra un vLLM/LM Studio local; transcripción persistente.
+
+---
+
+## Fase 3 — Tools deterministas: dados, ficha, estado
+
+**Objetivo.** Tool-calling real. Estado mecánico modificable solo vía tools, con validación.
+
+**Archivos.** `herramientas/{ficha,hp_xp,inventario,condiciones}.py`, `estado/estado_partida.py`, `esquemas/{ficha,evento}.py`, `nucleo/eventos.py` (real), `nucleo/logger.py` (append-only).
+
+**Tests.** Cobertura por tool (mínimo 1 happy path + 2 errores cada una). Determinismo de dados verificado.
+
+**Definición de hecho.** El LLM ya no puede tocar HP/XP/inventario directamente; cada cambio deja Evento.
+
+---
+
+## Fase 4 — Memoria narrativa y resúmenes
+
+**Objetivo.** Bitácora narrativa append-only + resúmenes de escena/sesión inyectables.
+
+**Archivos.** `memoria/{tipos,almacen}.py`, `narrativa/{director,bitacora}.py`, `herramientas/sesion.py`.
+
+**Tests.** Resumen reproducible con prompt fijo y mock LLM; bitácora no se pierde.
+
+**Definición de hecho.** Tras cerrar y reabrir, una partida puede continuar con contexto coherente.
+
+---
+
+## Fase 5 — Combate funcional
+
+**Objetivo.** Iniciativa, turnos, HP, CA, ataques, daño, condiciones básicas.
+
+**Archivos.** `herramientas/combate.py` (real), `estado/combate.py`, `reglas/combate.py`, fixtures monstruos básicos.
+
+**Tests.** Encuentro 1 PJ vs 2 goblins; iniciativa reproducible; condiciones aplicadas/retiradas; eventos correctos.
+
+**Definición de hecho.** Una sesión completa de combate puede jugarse end-to-end.
+
+---
+
+## Fase 6 — Creación de mundo, campaña, aventura
+
+**Objetivo.** Skills `crear-mundo`, `crear-campana`, `crear-aventura`. Migración de `config/tonos/` desde dnd5e.
+
+**Archivos.** `skills/crear-mundo/`, `skills/crear-campana/`, `skills/crear-aventura/`, `herramientas/{mundo,escena,campaña}.py`.
+
+**Tests.** Generación reproducible con seeds; YAML validados por schema.
+
+**Definición de hecho.** Se puede generar una campaña pequeña con 1 aventura y dirigirla en F4+F5.
+
+---
+
+## Fase 7 — RAG anti-spoiler
+
+**Objetivo.** Importar aventuras (PDF/MD), chunking, índice, filtros de visibilidad.
+
+**Archivos.** `rag/{ingesta,chunker,indice,filtros}.py`, `herramientas/rag.py`.
+
+**Tests.** Ingesta PDF→chunks; un chunk marcado `oculto` no aparece en perspectiva jugador; sí en perspectiva DM; auditoría de redacciones.
+
+**Definición de hecho.** Dirigir una aventura importada sin revelar zonas no descubiertas.
+
+---
+
+## Fase 8 — Sistema completo de skills
+
+**Objetivo.** Router de intención, progressive disclosure, todas las skills v1 declaradas.
+
+**Archivos.** `skills/router.py` (real), todas las skills `skills/*/SKILL.md` listas.
+
+**Tests.** Router elige skill correcta para 30 entradas etiquetadas (regresión).
+
+**Definición de hecho.** Cualquier escena se cubre con una skill explícita.
+
+---
+
+## Fase 9 — Integración con múltiples endpoints locales
+
+**Objetivo.** Probar vLLM, vMLX, llama.cpp, LM Studio, Open WebUI con perfiles.
+
+**Archivos.** `llm/cliente.py` afinado, `docs/MODELOS_LOCALES.md` ampliado.
+
+**Tests.** Cada endpoint smoke-test (skippable si no hay servidor).
+
+**Definición de hecho.** Cambio de perfil cambia modelo/endpoint sin reiniciar.
+
+---
+
+## Fase 10 — Interfaz cómoda
+
+**Objetivo.** CLI rica (Rich/Textual), comandos, historial, modo debug, exportación de campaña.
+
+**Tests.** Snapshot de renderizado clave.
+
+**Definición de hecho.** Comparable en comodidad a `cli_aventura.py` del proyecto antiguo pero modular.
+
+---
+
+## Fase 11 — Evaluación, tests, hardening
+
+**Objetivo.** Tests de integración, anti-spoiler, recuperación, fixtures completos.
+
+**Definición de hecho.** Cobertura mínima del 70 % en `nucleo/`, `herramientas/`, `rag/filtros.py` al 100 %.
+
+---
+
+## Fase 12 — Proyección avanzada (diseño, no implementación)
+
+Documentar en `docs/FUTURO/`:
+- Multijugador local.
+- Subagentes especializados (Narrador, Árbitro, Diseñador, Guardián continuidad).
+- Generación de mapas e imágenes.
+- Voz (STT/TTS).
+- Compatibilidad con otros sistemas (PbtA, FATE, Cypher…).
+- SQLite + Qdrant/Chroma.
+- Modo servidor LAN.
+- Modo "DM assistant" para partidas humanas.
+- Modo "autor de campaña" (no es director, solo crea).
+
+Sin código todavía; sólo decisiones y trade-offs.

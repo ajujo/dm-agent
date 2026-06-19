@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "endpoints": {
+    "local_rtx5090": {
+      "base_url": "http://localhost:8000/v1",
+      "tipo": "openai-compatible",
+      "backend": "vllm",
+      "api_key_env": "DM_AGENT_VLLM_KEY",
+      "comentario": "Servidor vLLM en RTX 5090 (juego en vivo)"
+    },
+    "local_mac_studio": {
+      "base_url": "http://mac-studio.local:8080/v1",
+      "tipo": "openai-compatible",
+      "backend": "mlx-lm",
+      "api_key_env": "DM_AGENT_MLX_KEY",
+      "comentario": "Mac Studio M2 Ultra (modelos grandes para creación)"
+    },
+    "local_lmstudio": {
+      "base_url": "http://localhost:1234/v1",
+      "tipo": "openai-compatible",
+      "backend": "lm-studio",
+      "api_key_env": "DM_AGENT_LMSTUDIO_KEY",
+      "comentario": "LM Studio local opcional"
+    },
+    "local_llamacpp": {
+      "base_url": "http://localhost:8080/v1",
+      "tipo": "openai-compatible",
+      "backend": "llama.cpp",
+      "api_key_env": "DM_AGENT_LLAMACPP_KEY",
+      "comentario": "llama.cpp server opcional"
+    },
+    "local_openwebui": {
+      "base_url": "http://localhost:3000/api/v1",
+      "tipo": "openai-compatible",
+      "backend": "open-webui",
+      "api_key_env": "DM_AGENT_OPENWEBUI_KEY",
+      "comentario": "Open WebUI como gateway"
+    }
+  }
+}

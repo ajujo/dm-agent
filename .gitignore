@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Virtual envs (no debería haber ninguno aquí, usamos conda rpg)
+.venv/
+venv/
+env/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Secrets / config local
+.env
+.env.*
+!.env.example
+config/local.json
+config/local.*.json
+
+# Runtime data (datos de partida del usuario)
+logs/
+storage/
+*.sqlite
+*.db
+
+# Caches de modelos / RAG
+.cache/
+indices/
+embeddings/
+
+# OS
+.DS_Store
+Thumbs.db

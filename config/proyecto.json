@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "nombre_proyecto": "dm-agent",
+  "perfil_por_defecto": "rapido",
+  "tono_por_defecto": "epica_heroica",
+  "permitir_cloud": false,
+  "max_iter_turno": 8,
+  "rutas": {
+    "storage": "./storage",
+    "logs": "./logs",
+    "compendio": "./compendio",
+    "skills": "./skills",
+    "config": "./config"
+  },
+  "auditoria": {
+    "log_eventos": true,
+    "log_redacciones_rag": true,
+    "snapshots_por_turno": false
+  }
+}
