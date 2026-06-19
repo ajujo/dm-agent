@@ -54,6 +54,7 @@
 Subfases:
 - **F2.1 — Cliente LLM OpenAI-compatible.** ✅ **Implementada** (commit `feat: add OpenAI-compatible LLM client`).
 - **F2.2 — Agent loop mínimo + REPL + sesión JSONL.** ✅ **Implementada** (commit `feat: add minimal DM agent loop and REPL`).
+- **F2.3 — Validación manual.** ✅ Procedimiento documentado en [`PRUEBA_MANUAL_F2.md`](./PRUEBA_MANUAL_F2.md) (sin código nuevo).
 
 **Archivos.**
 - `src/dm_agent/llm/cliente.py` (cliente OpenAI-compatible). ✅ F2.1 — no-streaming; `stream=True` lanza `NotImplementedError`.

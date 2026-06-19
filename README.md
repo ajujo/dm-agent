@@ -75,6 +75,7 @@ dm-agent --continuar              # retoma última sesión
 |---|---|
 | [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) | Visión completa del sistema. |
 | [`docs/PLAN_FASES.md`](docs/PLAN_FASES.md) | Hoja de ruta por fases. |
+| [`docs/PRUEBA_MANUAL_F2.md`](docs/PRUEBA_MANUAL_F2.md) | Cómo validar la REPL contra un endpoint local. |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Issues iniciales. |
 | [`docs/RIESGOS.md`](docs/RIESGOS.md) | Riesgos técnicos y mitigaciones. |
 | [`docs/DECISIONES_ABIERTAS.md`](docs/DECISIONES_ABIERTAS.md) | Decisiones pendientes. |
