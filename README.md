@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-**Fase 0–1 + F1.1 + F2.1 + F2.2 + F3.1–F3.6 + F4.1–F4.5**: análisis, esqueleto, repo preparado, cliente LLM, **REPL mínima jugable**, **esquemas base de estado** (`Ficha`, `EstadoPartida`, `Evento`), **persistencia JSON** (`GestorEstado`), **tools `ficha.*` / `hp_xp.*` / `inventario.*`** con **eventos auditables unificados**, **memoria narrativa** (`narrativa.*`), **resúmenes con LLM** (`resumen.*`), **inyección automática de memoria al contexto** y **cierre de sesión** (`sesion.*` + comando `/cerrar`: resumen de cierre + punto de arranque de la próxima). Con **F4.5** el bucle de continuidad está **validado extremo a extremo** (test integrado con mock LLM, `tests/test_campaña_integrada_f4.py`) y documentado para validación real (`docs/PRUEBA_MANUAL_F4.md`): el proyecto tiene una **campaña persistente básica**. **Aún no tiene combate, RAG, memoria vectorial, entidades estructuradas, economía, reglas adaptadas implementadas, streaming ni cierre automático al salir**: no es una campaña completa.
+**Fase 0–1 + F1.1 + F2.1 + F2.2 + F3.1–F3.6 + F4.1–F4.6**: análisis, esqueleto, repo preparado, cliente LLM, **REPL mínima jugable**, **esquemas base de estado** (`Ficha`, `EstadoPartida`, `Evento`), **persistencia JSON** (`GestorEstado`), **tools `ficha.*` / `hp_xp.*` / `inventario.*`** con **eventos auditables unificados**, **memoria narrativa** (`narrativa.*`), **resúmenes con LLM** (`resumen.*`), **inyección automática de memoria al contexto** y **cierre de sesión** (`sesion.*` + comando `/cerrar`: resumen de cierre + punto de arranque de la próxima). Con **F4.5** el bucle de continuidad quedó **validado extremo a extremo** (test integrado con mock LLM, `tests/test_campaña_integrada_f4.py`) y documentado para validación real (`docs/PRUEBA_MANUAL_F4.md`). Con **F4.6**, el agente ya puede guardar y consultar **PNJ, lugares, pistas, objetivos y frentes abiertos** como entidades narrativas estructuradas (`entidad.*`), e inyectar las más relevantes al contexto. El proyecto tiene una **campaña persistente básica con memoria narrativa + memoria estructurada**. **Aún no tiene combate, RAG, memoria vectorial, extracción automática de entidades, economía, reglas adaptadas implementadas, streaming ni cierre automático al salir**: no es una campaña completa.
 
 `dm-agent` usa D&D 5.5 como base pero lo **adapta** a juego narrativo en solitario / teatro de la mente (ver [`docs/REGLAS_ADAPTADAS.md`](docs/REGLAS_ADAPTADAS.md) y [ADR-0017](docs/decisiones/0017-dnd55-narrativo-solitario.md)); esa adaptación es por ahora solo diseño.
 
@@ -91,6 +91,8 @@ dm-agent --continuar              # retoma última sesión
 | [`docs/memoria/contexto.md`](docs/memoria/contexto.md) | Inyección de memoria narrativa al contexto del agente. |
 | [`docs/memoria/cierre_sesion.md`](docs/memoria/cierre_sesion.md) | Cierre y preparación de sesión (`/cerrar`). |
 | [`docs/tools/sesion.md`](docs/tools/sesion.md) | Tools `sesion.*` (cierre de sesión). |
+| [`docs/tools/entidades.md`](docs/tools/entidades.md) | Tools `entidad.*` (PNJ, lugares, pistas, objetivos, frentes abiertos). |
+| [`docs/memoria/entidades.md`](docs/memoria/entidades.md) | Entidades narrativas estructuradas por campaña. |
 | [`docs/estado/eventos.md`](docs/estado/eventos.md) | Eventos auditables JSONL por campaña. |
 | [`docs/REGLAS_ADAPTADAS.md`](docs/REGLAS_ADAPTADAS.md) | D&D 5.5 adaptado a solitario / teatro de la mente (D17). |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Issues iniciales. |

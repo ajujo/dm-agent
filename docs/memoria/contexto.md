@@ -52,6 +52,11 @@ partir de ella. Si algo no está claro, pregunta o mantén la ambigüedad.
 
 Si no hay nada que mostrar, devuelve cadena vacía y no se añade el segundo system.
 
+Desde **F4.6**, si se pasa un `gestor_entidades`, el bloque también puede
+incluir una sección `## Entidades importantes` (PNJ, lugares, pistas,
+objetivos, frentes abiertos). Ver
+[`entidades.md`](entidades.md#inyección-al-contexto) para el detalle.
+
 ## Configuración
 
 `config/proyecto.json`:
@@ -62,13 +67,17 @@ Si no hay nada que mostrar, devuelve cadena vacía y no se añade el segundo sys
   "memoria": {
     "inyectar_narrativa": true,
     "limite_entradas_contexto": 8,
-    "incluir_resumenes": true
+    "incluir_resumenes": true,
+    "inyectar_entidades": true,
+    "limite_entidades_contexto": 8
   }
 }
 ```
 
 Comportamiento seguro si falta: `inyectar_narrativa=true`, `limite=8`,
-`incluir_resumenes=true`, `campaña_activa="campana_demo"`.
+`incluir_resumenes=true`, `campaña_activa="campana_demo"`,
+`inyectar_entidades=true`, `limite_entidades_contexto=8`. Si
+`inyectar_narrativa` es `false`, no se inyecta nada (tampoco entidades).
 
 ### Campaña activa (decisión F4.3)
 
@@ -86,13 +95,15 @@ no se rediseña el REPL.
   fija (último resumen + N entradas). No hay embeddings ni recuperación por
   relevancia.
 
-## Límites (F4.3) y futuro
+## Límites (F4.3+F4.6) y futuro
 
 - Ventana reciente fija; sin recuperación semántica ni por tags.
-- Sin PNJ/facciones/localizaciones estructurados.
+- Desde F4.6 hay PNJ/lugares/pistas/objetivos/frentes **estructurados**
+  (`entidad.*`, ver [`entidades.md`](entidades.md)), pero sin extracción
+  automática, sin facciones complejas y sin grafo de relaciones validado.
 - Sin resumen automático al cerrar sesión (las tools `resumen.*` son manuales).
 - Sin combate, reglas adaptadas ni streaming.
 - Coherente con D17: continuidad narrativa, no log táctico.
 
 Futuro: selección de campaña, recuperación por relevancia/tags, y
-resumen/preparación automáticos de sesión (F4.4+).
+extracción automática de entidades desde la narración.

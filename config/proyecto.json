@@ -9,7 +9,9 @@
   "memoria": {
     "inyectar_narrativa": true,
     "limite_entradas_contexto": 8,
-    "incluir_resumenes": true
+    "incluir_resumenes": true,
+    "inyectar_entidades": true,
+    "limite_entidades_contexto": 8
   },
   "rutas": {
     "storage": "./storage",

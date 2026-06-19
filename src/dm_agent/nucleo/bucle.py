@@ -15,6 +15,7 @@ from typing import Any
 from dm_agent.estado.eventos import RegistroEventosEstado
 from dm_agent.estado.gestor import GestorEstado
 from dm_agent.herramientas.dados import crear_tool_dados
+from dm_agent.herramientas.entidades import crear_tools_entidades
 from dm_agent.herramientas.ficha import crear_tools_ficha
 from dm_agent.herramientas.hp_xp import crear_tools_hp_xp
 from dm_agent.herramientas.inventario import crear_tools_inventario
@@ -25,6 +26,7 @@ from dm_agent.herramientas.sesion import crear_tools_sesion
 from dm_agent.llm.cliente import ClienteLLM, ErrorLLM
 from dm_agent.memoria.cierre_sesion import CierreSesionNarrativa, ErrorCierre
 from dm_agent.memoria.contexto import ConstructorContextoMemoria
+from dm_agent.memoria.entidades import GestorEntidadesNarrativas
 from dm_agent.memoria.narrativa import GestorMemoriaNarrativa
 from dm_agent.memoria.resumen import ResumidorNarrativo
 from dm_agent.nucleo.agente import AgenteDM
@@ -59,6 +61,7 @@ def _crear_registro(
     resumidor: ResumidorNarrativo,
     cierre: CierreSesionNarrativa,
     dir_sesiones: Path,
+    entidades_narrativas: GestorEntidadesNarrativas,
 ) -> RegistroHerramientas:
     registro = RegistroHerramientas()
     registro.registrar(crear_tool_dados())
@@ -73,6 +76,8 @@ def _crear_registro(
     for tool in crear_tools_resumen(resumidor):
         registro.registrar(tool)
     for tool in crear_tools_sesion(cierre, dir_sesiones):
+        registro.registrar(tool)
+    for tool in crear_tools_entidades(entidades_narrativas):
         registro.registrar(tool)
     return registro
 
@@ -119,6 +124,7 @@ class SesionInteractiva:
         self.gestor = GestorEstado(raiz_storage)
         self.registro_eventos = RegistroEventosEstado(raiz_storage)
         self.memoria_narrativa = GestorMemoriaNarrativa(raiz_storage)
+        self.entidades_narrativas = GestorEntidadesNarrativas(raiz_storage)
         self.resumidor = ResumidorNarrativo(self.cliente, self.memoria_narrativa)
         self.cierre = CierreSesionNarrativa(self.cliente, self.memoria_narrativa)
         self.registro = _crear_registro(
@@ -128,6 +134,7 @@ class SesionInteractiva:
             self.resumidor,
             self.cierre,
             self.dir_sesiones,
+            self.entidades_narrativas,
         )
         self.system_prompt = cargar_prompt(SYSTEM_DM_MINIMO)
 
@@ -135,11 +142,16 @@ class SesionInteractiva:
         mem_cfg = self.proyecto.get("memoria", {})
         self.campaña_id = self.proyecto.get("campaña_activa", "campana_demo")
         if mem_cfg.get("inyectar_narrativa", True):
+            gestor_entidades = (
+                self.entidades_narrativas if mem_cfg.get("inyectar_entidades", True) else None
+            )
             self.constructor_memoria: ConstructorContextoMemoria | None = (
                 ConstructorContextoMemoria(
                     self.memoria_narrativa,
                     limite_entradas=int(mem_cfg.get("limite_entradas_contexto", 8)),
                     incluir_resumenes=bool(mem_cfg.get("incluir_resumenes", True)),
+                    gestor_entidades=gestor_entidades,
+                    limite_entidades=int(mem_cfg.get("limite_entidades_contexto", 8)),
                 )
             )
         else:

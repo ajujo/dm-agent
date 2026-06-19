@@ -108,8 +108,10 @@ class RegistroHerramientas:
             raise HerramientaNoRegistrada(nombre_api)
         return self._api_a_interno[nombre_api]
 
-    def dispatch(self, nombre: str, ctx: Any, **args: Any) -> ResultadoHerramienta:
-        h = self.obtener(nombre)
+    def dispatch(self, nombre_herramienta: str, ctx: Any, **args: Any) -> ResultadoHerramienta:
+        # Parámetro `nombre_herramienta` (no `nombre`) para no colisionar con
+        # tools que aceptan un argumento `nombre` (p. ej. `entidad.guardar_*`).
+        h = self.obtener(nombre_herramienta)
         ok, motivo = h.disponible(ctx)
         if not ok:
             return ResultadoHerramienta(ok=False, errores=[f"no disponible: {motivo}"])
