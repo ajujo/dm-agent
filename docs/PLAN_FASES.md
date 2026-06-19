@@ -81,13 +81,13 @@ Subfases:
 - **F3.2 — GestorEstado JSON + snapshots.** ✅ **Implementada** (commit `feat: add JSON state manager`). Persistencia JSON de `Ficha`/`EstadoPartida` con escritura atómica y snapshots opcionales. Sin tools todavía.
 - **F3.3 — Tools `ficha.*`.** ✅ **Implementada** (commit `feat: add character sheet tools`). `ficha.{leer,guardar,validar,actualizar,listar}` sobre `GestorEstado`, disponibles para el agente. Sin HP/XP semántico.
 - **F3.4 — Tools `hp_xp.*` + eventos auditables JSONL.** ✅ **Implementada** (commit `feat: add HP and XP tools`). `hp_xp.{aplicar_daño,aplicar_curacion,otorgar_xp,consultar_estado_vital}` sobre `GestorEstado`+`Ficha`; cada cambio deja `Evento` en `eventos.jsonl`. Sin combate, muerte ni subida de nivel.
-- **F3.5 — Normalizar/unificar eventos.** ⏳ Pendiente. **Incluye unificar los dos `Evento`** (el dataclass de `nucleo.eventos` y el pydantic de `esquemas.evento`, que F3.4 ya usa para el log auditable).
+- **F3.5 — Normalizar/unificar eventos.** ✅ **Implementada** (commit `refactor: unify event model`). Modelo canónico único `esquemas.evento.Evento`; `nucleo.eventos` lo re-exporta y el bus lo publica; dados migrado a `crear_evento`. Cierra el bloque de estado mecánico mínimo (ficha + HP/XP + eventos auditables).
 
-**Archivos.** `esquemas/{ficha,estado,evento,comun}.py` ✅ F3.1; `estado/gestor.py` ✅ F3.2; `herramientas/ficha.py` ✅ F3.3; `herramientas/hp_xp.py` + `estado/eventos.py` ✅ F3.4; `herramientas/{inventario,condiciones}.py`, `nucleo/eventos.py` (unificación) ⏳.
+**Archivos.** `esquemas/{ficha,estado,evento,comun}.py` ✅ F3.1; `estado/gestor.py` ✅ F3.2; `herramientas/ficha.py` ✅ F3.3; `herramientas/hp_xp.py` + `estado/eventos.py` ✅ F3.4; `nucleo/eventos.py` (unificado) ✅ F3.5; `herramientas/{inventario,condiciones}.py` ⏳.
 
-**Tests.** `tests/test_esquemas_f3.py` ✅ F3.1; `tests/test_gestor_estado.py` ✅ F3.2; `tests/test_tools_ficha.py` ✅ F3.3; `tests/test_tools_hp_xp.py` ✅ F3.4. Cobertura por tool (mínimo 1 happy path + 2 errores cada una) ⏳ resto.
+**Tests.** `tests/test_esquemas_f3.py` ✅ F3.1; `tests/test_gestor_estado.py` ✅ F3.2; `tests/test_tools_ficha.py` ✅ F3.3; `tests/test_tools_hp_xp.py` ✅ F3.4; `tests/test_eventos_unificados.py` ✅ F3.5.
 
-**Definición de hecho.** El LLM ya no puede tocar HP/XP/inventario directamente; cada cambio deja Evento. *(No alcanzada aún: F3.1 aporta esquemas, F3.2 aporta persistencia; faltan las tools.)*
+**Definición de hecho.** El LLM ya no toca HP/XP directamente; cada cambio deja un `Evento` auditable con modelo unificado. ✅ Para el bloque mínimo (ficha + HP/XP). *Inventario y condiciones quedan fuera de este bloque.*
 
 > **Reglas adaptadas (D17).** Documentación en `docs/REGLAS_ADAPTADAS.md` + [ADR-0017](./decisiones/0017-dnd55-narrativo-solitario.md): D&D 5.5 adaptado a juego narrativo en solitario. La implementación (motor de adaptación, tools de aprobación de reglas caseras) se planificará en una fase de reglas posterior; **no** forma parte de F3.
 

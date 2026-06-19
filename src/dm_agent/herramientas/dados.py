@@ -18,7 +18,7 @@ from enum import StrEnum
 from typing import Any
 
 from dm_agent.herramientas.base import ResultadoHerramienta
-from dm_agent.nucleo.eventos import Evento
+from dm_agent.nucleo.eventos import crear_evento
 
 _REGEX_TIRADA = re.compile(r"^\s*(\d+)\s*d\s*(\d+)\s*([+-]\s*\d+)?\s*$", re.IGNORECASE)
 
@@ -166,8 +166,9 @@ class _ToolDados:
         except ValueError as e:
             return ResultadoHerramienta(ok=False, errores=[str(e)])
 
-        evt = Evento(
-            tipo="dados_tirados",
+        evt = crear_evento(
+            "dados_tirados",
+            tool="dados.tirar",
             datos={
                 "expresion": r.expresion,
                 "dados": r.dados,
@@ -176,8 +177,8 @@ class _ToolDados:
                 "tipo": r.tipo.value,
                 "critico": r.critico,
                 "pifia": r.pifia,
+                "semilla": semilla,
             },
-            semilla_dados=semilla,
         )
         return ResultadoHerramienta(
             ok=True,

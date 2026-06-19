@@ -1,32 +1,29 @@
-"""Sistema de eventos del agente.
+"""Bus de eventos en memoria (runtime).
 
-Versión Fase 1: dataclass + bus pub/sub mínimo en memoria.
-Fase 3 añadirá subscribers reales (logger, bitácora narrativa).
+F3.5 — unificación: el modelo de `Evento` es **canónico** y vive en
+`dm_agent.esquemas.evento`. Este módulo lo **re-exporta** (no hay ya un dataclass
+paralelo) y ofrece un bus pub/sub mínimo que publica ese mismo modelo Pydantic.
+
+    from dm_agent.nucleo.eventos import Evento  # == dm_agent.esquemas.evento.Evento
+
+Para construir eventos usa `crear_evento(tipo, ...)` (genera `id` y `timestamp`).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from typing import Any
 
+from dm_agent.esquemas.evento import Evento, crear_evento
 
-@dataclass(frozen=True, slots=True)
-class Evento:
-    tipo: str
-    actor: str | None = None
-    objetivo: str | None = None
-    datos: dict[str, Any] = field(default_factory=dict)
-    motivo_llm: str | None = None
-    semilla_dados: int | None = None
-    momento: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+__all__ = ["BusEventos", "Evento", "Subscriber", "bus", "crear_evento"]
 
 
 Subscriber = Callable[[Evento], None]
 
 
 class BusEventos:
+    """Bus pub/sub mínimo en memoria. Publica `Evento` canónicos."""
+
     def __init__(self) -> None:
         self._subs: list[Subscriber] = []
 

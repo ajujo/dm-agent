@@ -89,15 +89,16 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Estado.** `src/dm_agent/esquemas/{ficha,estado,evento,comun}.py` (pydantic v2, `version_schema=1`, validaciones explícitas). Docs en `docs/esquemas/`. Tests: `tests/test_esquemas_f3.py`. Sin tools ni gestor de estado todavía.
 ### #F3-00b — GestorEstado JSON + snapshots — ✅ HECHO (F3.2)
 - **Estado.** `src/dm_agent/estado/gestor.py` (`GestorEstado`): guardar/cargar `Ficha` y `EstadoPartida`, listar fichas, escritura atómica (tmp+replace), snapshots opcionales, errores tipados (`ErrorEstado{,NoEncontrado,Invalido}`). Docs: `docs/estado/gestor_estado.md`. Tests: `tests/test_gestor_estado.py`.
-- **Pendiente F3.5:** unificar los dos `Evento` (`nucleo.eventos` dataclass runtime + `esquemas.evento` pydantic persistible).
 ### #F3-01 — Tools `ficha.*` (sobre esquema `Ficha`) — ✅ HECHO (F3.3)
 - **Estado.** `src/dm_agent/herramientas/ficha.py`: `ficha.{leer,guardar,validar,actualizar,listar}` (API `ficha_*`), apoyadas en `GestorEstado` + validación `Ficha`. Registradas en el agente vía `bucle._crear_registro`. Errores controlados (sin tracebacks al LLM). Docs: `docs/tools/ficha.md`. Tests: `tests/test_tools_ficha.py`. Sin HP/XP semántico ni edición profunda.
 ### #F3-02 — Tools `hp_xp.*` + eventos auditables — ✅ HECHO (F3.4)
 - **Estado.** `src/dm_agent/herramientas/hp_xp.py`: `hp_xp.{aplicar_daño,aplicar_curacion,otorgar_xp,consultar_estado_vital}` (API `hp_xp_aplicar_dano`, …; ñ→n transliterada). Cargan/validan/guardan vía `GestorEstado`+`Ficha`; cada escritura registra `Evento` en `eventos.jsonl` (`src/dm_agent/estado/eventos.py`, `RegistroEventosEstado`). Registradas en el agente. Docs: `docs/tools/hp_xp.md`, `docs/estado/eventos.md`. Tests: `tests/test_tools_hp_xp.py`.
-- **Pendiente F3.5:** unificar `nucleo.eventos.Evento` (runtime) y `esquemas.evento.Evento` (persistible).
-### #F3-03 — Tools `inventario.*`
+### #F3-02b — Unificación del modelo de `Evento` — ✅ HECHO (F3.5)
+- **Estado.** Modelo canónico único `esquemas.evento.Evento`; `nucleo.eventos` lo re-exporta y el bus lo publica; `dados.tirar` migrado a `crear_evento` (`semilla` → `datos`). Cierra el bloque de estado mecánico mínimo (ficha + HP/XP + eventos). Tests: `tests/test_eventos_unificados.py`. Docs: `docs/estado/eventos.md`.
+### #F3-03 — Tools `inventario.*`  ⏳ (propuesto F3.6)
 ### #F3-04 — Tools `condiciones.*`
-### #F3-05 — Bus de eventos + logger append-only JSONL  ⏳ F3.5
+### #F3-05 — Bus de eventos como vía única de persistencia (subscriber) — parcial
+- **Estado.** Bus runtime canónico disponible; aún no es la vía única (las tools persisten directo vía `RegistroEventosEstado`). Deuda menor.
 ### #F3-06 — Validador central de cambios de estado
 - **P.** todas P1.
 
