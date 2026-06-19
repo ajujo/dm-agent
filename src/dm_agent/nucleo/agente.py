@@ -21,6 +21,7 @@ from typing import Any
 
 from dm_agent.herramientas.registro import HerramientaNoRegistrada, RegistroHerramientas
 from dm_agent.llm.cliente import ClienteLLM, ToolCall
+from dm_agent.memoria.contexto import ConstructorContextoMemoria
 from dm_agent.persistencia.sesion import Sesion
 
 
@@ -34,6 +35,8 @@ class AgenteDM:
         system_prompt: str,
         max_iter_turno: int = 8,
         debug: bool = False,
+        constructor_memoria: ConstructorContextoMemoria | None = None,
+        campaña_id: str | None = None,
     ) -> None:
         self.cliente = cliente
         self.registro = registro
@@ -41,6 +44,9 @@ class AgenteDM:
         self.system_prompt = system_prompt
         self.max_iter_turno = max(1, max_iter_turno)
         self.debug = debug
+        # Inyección de memoria narrativa (F4.3): solo si hay constructor y campaña.
+        self.constructor_memoria = constructor_memoria
+        self.campaña_id = campaña_id
 
     # -- Construcción de messages ---------------------------------------------
 
@@ -51,6 +57,10 @@ class AgenteDM:
         turnos en esta versión mínima; el round-trip de tools vive solo dentro
         del turno en curso."""
         messages: list[dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
+        bloque_memoria = self._bloque_memoria()
+        if bloque_memoria:
+            # Segundo mensaje system: continuidad narrativa, sin sustituir el base.
+            messages.append({"role": "system", "content": bloque_memoria})
         for ev in self.sesion.historial():
             tipo = ev.get("tipo")
             if tipo == "user":
@@ -60,6 +70,12 @@ class AgenteDM:
                 if contenido:
                     messages.append({"role": "assistant", "content": contenido})
         return messages
+
+    def _bloque_memoria(self) -> str:
+        """Bloque de memoria narrativa a inyectar, o "" si no procede."""
+        if self.constructor_memoria is None or not self.campaña_id:
+            return ""
+        return self.constructor_memoria.construir_bloque_memoria(self.campaña_id)
 
     # -- Ejecución de una tool call -------------------------------------------
 

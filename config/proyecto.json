@@ -5,6 +5,12 @@
   "tono_por_defecto": "epica_heroica",
   "permitir_cloud": false,
   "max_iter_turno": 8,
+  "campaña_activa": "campana_demo",
+  "memoria": {
+    "inyectar_narrativa": true,
+    "limite_entradas_contexto": 8,
+    "incluir_resumenes": true
+  },
   "rutas": {
     "storage": "./storage",
     "logs": "./logs",

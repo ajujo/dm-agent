@@ -22,6 +22,7 @@ from dm_agent.herramientas.narrativa import crear_tools_narrativa
 from dm_agent.herramientas.registro import RegistroHerramientas
 from dm_agent.herramientas.resumen import crear_tools_resumen
 from dm_agent.llm.cliente import ClienteLLM, ErrorLLM
+from dm_agent.memoria.contexto import ConstructorContextoMemoria
 from dm_agent.memoria.narrativa import GestorMemoriaNarrativa
 from dm_agent.memoria.resumen import ResumidorNarrativo
 from dm_agent.nucleo.agente import AgenteDM
@@ -117,6 +118,20 @@ class SesionInteractiva:
         )
         self.system_prompt = cargar_prompt(SYSTEM_DM_MINIMO)
 
+        # Memoria narrativa inyectable (F4.3). Campaña activa: config o "campana_demo".
+        mem_cfg = self.proyecto.get("memoria", {})
+        self.campaña_id = self.proyecto.get("campaña_activa", "campana_demo")
+        if mem_cfg.get("inyectar_narrativa", True):
+            self.constructor_memoria: ConstructorContextoMemoria | None = (
+                ConstructorContextoMemoria(
+                    self.memoria_narrativa,
+                    limite_entradas=int(mem_cfg.get("limite_entradas_contexto", 8)),
+                    incluir_resumenes=bool(mem_cfg.get("incluir_resumenes", True)),
+                )
+            )
+        else:
+            self.constructor_memoria = None
+
         self.sesion: Sesion | None = None
         self.agente: AgenteDM | None = None
 
@@ -131,6 +146,8 @@ class SesionInteractiva:
             system_prompt=self.system_prompt,
             max_iter_turno=self.max_iter,
             debug=self.debug,
+            constructor_memoria=self.constructor_memoria,
+            campaña_id=self.campaña_id,
         )
 
     def nueva_sesion(self) -> str:

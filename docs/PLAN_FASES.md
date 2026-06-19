@@ -101,13 +101,13 @@ Subfases:
 Subfases:
 - **F4.1 — Bitácora narrativa + memoria narrativa básica.** ✅ **Implementada** (commit `feat: add narrative memory log`). `EntradaNarrativa`, `GestorMemoriaNarrativa` (JSONL + Markdown append-only) y tools `narrativa.{registrar,reciente}`. Sin resumen LLM ni inyección automática.
 - **F4.2 — Resumen de escena/sesión con LLM.** ✅ **Implementada** (commit `feat: add narrative summarization tools`). `ResumidorNarrativo` + tools `resumen.{entradas,texto}` + prompt fijo `resumen_narrativo.md`; guardan `EntradaNarrativa(tipo="resumen")`. Sin inyección automática.
-- **F4.3 — Inyección de memoria narrativa en el contexto del agente.** ⏳ Pendiente.
+- **F4.3 — Inyección de memoria narrativa en el contexto del agente.** ✅ **Implementada** (commit `feat: inject narrative memory into agent context`). `ConstructorContextoMemoria` + inyección como 2º mensaje `system` en `AgenteDM`; config `memoria` + `campaña_activa` en `proyecto.json`. Sin RAG ni entidades estructuradas.
 
-**Archivos.** `esquemas/narrativa.py` + `memoria/narrativa.py` + `herramientas/narrativa.py` ✅ F4.1; `memoria/resumen.py` + `herramientas/resumen.py` + `prompts/resumen_narrativo.md` ✅ F4.2; inyección ⏳.
+**Archivos.** `esquemas/narrativa.py` + `memoria/narrativa.py` + `herramientas/narrativa.py` ✅ F4.1; `memoria/resumen.py` + `herramientas/resumen.py` + `prompts/resumen_narrativo.md` ✅ F4.2; `memoria/contexto.py` + integración en `nucleo/agente.py` ✅ F4.3.
 
-**Tests.** `tests/test_memoria_narrativa.py`, `tests/test_tools_narrativa.py` ✅ F4.1; `tests/test_resumen_memoria.py`, `tests/test_tools_resumen.py` (resumen con prompt fijo y mock LLM) ✅ F4.2.
+**Tests.** F4.1 + F4.2 + `tests/test_contexto_memoria.py`, `tests/test_agente_memoria.py` ✅ F4.3.
 
-**Definición de hecho.** Tras cerrar y reabrir, una partida puede continuar con contexto coherente. *(No alcanzada aún: F4.1 persiste la memoria pero todavía no se resume ni se inyecta al contexto.)*
+**Definición de hecho.** Tras cerrar y reabrir, una partida puede continuar con contexto coherente. ✅ La memoria narrativa reciente (último resumen + entradas) se inyecta automáticamente en cada turno. *Pendiente: resumen/preparación automáticos al cerrar sesión (F4.4) y RAG.*
 
 ---
 
