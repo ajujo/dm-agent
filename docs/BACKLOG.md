@@ -133,11 +133,15 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 
 ## F5 — Combate
 
-### #F5-01 — Estado de combate + iniciativa
-### #F5-02 — Tools `combate.*`
+### #F5-01 — Combate narrativo mínimo — ✅ HECHO (F5.1)
+- **Estado.** Esquemas `EnemigoCombate`/`CombateNarrativo` (`esquemas/combate.py`). `GestorCombateNarrativo` (`estado/combate.py`): un JSON por combate (`combates/<combate_id>.json`) + referencia de combate activo por campaña (`combates/activo.json`, solo el `combate_id`, nunca el combate completo). Tools `combate.{iniciar,estado,añadir_enemigo,daño_enemigo,terminar}` (`herramientas/combate.py`), con eventos auditables (`combate_iniciado`, `enemigo_añadido`, `daño_enemigo`, `combate_terminado`) vía `RegistroEventosEstado`. Distancias narrativas abstractas (`cerca`/`media`/`lejos`/`fuera_de_alcance`); sin grid/casillas. El daño al personaje jugador sigue pasando por `hp_xp.aplicar_daño`; sin XP automática. Docs: `docs/estado/combate.md`, `docs/tools/combate.md`. Tests: `tests/test_combate_narrativo.py`, `tests/test_tools_combate.py`.
+- **Decisión técnica.** `combate.iniciar` crea el combate ya en estado `activo` directamente (sin paso `preparando` expuesto vía tool en F5.1); `activo.json` guarda solo una referencia por simplicidad y para evitar desincronización con el contenido real del combate.
+- **Pendiente:** integración con memoria narrativa (sugerir/registrar consecuencia al terminar combate); iniciativa/turnos más ricos, condiciones, ataques con tirada real si el diseño narrativo lo justifica más adelante.
+- **P.** P1.
+### #F5-02 — Integración narrativa de combate (sugerir/registrar consecuencia al terminar)
 ### #F5-03 — Skill `dirigir-combate`
-### #F5-04 — Reglas básicas (ataque, daño, condiciones)
-### #F5-05 — Fixtures: 4 enemigos low-level
+### #F5-04 — Reglas básicas más ricas (ataque con tirada, condiciones) — solo si D17 lo justifica
+### #F5-05 — Fixtures: enemigos low-level reutilizables
 - **P.** P1.
 
 ---

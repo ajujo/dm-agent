@@ -116,13 +116,28 @@ Subfases:
 
 ## Fase 5 — Combate funcional
 
-**Objetivo.** Iniciativa, turnos, HP, CA, ataques, daño, condiciones básicas.
+**Objetivo.** Sostener escenas de combate, primero en versión narrativa mínima
+y más adelante (subfases posteriores) con más profundidad táctica si procede,
+siempre coherente con D17 (D&D 5.5 narrativo en solitario / teatro de la
+mente).
 
-**Archivos.** `herramientas/combate.py` (real), `estado/combate.py`, `reglas/combate.py`, fixtures monstruos básicos.
+Subfases:
+- **F5.1 — Combate narrativo mínimo.** ✅ **Implementada** (commit `feat: add minimal narrative combat`). Esquemas `EnemigoCombate`/`CombateNarrativo` (`esquemas/combate.py`), `GestorCombateNarrativo` (un JSON por combate + referencia de combate activo por campaña) y tools `combate.{iniciar,estado,añadir_enemigo,daño_enemigo,terminar}` con eventos auditables (`combate_iniciado`, `enemigo_añadido`, `daño_enemigo`, `combate_terminado`). Distancias abstractas (`cerca`/`media`/`lejos`/`fuera_de_alcance`), sin grid/casillas. El daño al personaje jugador sigue pasando por `hp_xp.aplicar_daño`; no hay XP automática. Sin inyección de combate al contexto narrativo todavía.
 
-**Tests.** Encuentro 1 PJ vs 2 goblins; iniciativa reproducible; condiciones aplicadas/retiradas; eventos correctos.
+**Archivos.** `esquemas/combate.py` + `estado/combate.py` + `herramientas/combate.py` ✅ F5.1.
 
-**Definición de hecho.** Una sesión completa de combate puede jugarse end-to-end.
+**Tests.** `tests/test_combate_narrativo.py`, `tests/test_tools_combate.py` ✅ F5.1.
+
+**Definición de hecho (F5.1).** El agente ya puede gestionar combates
+narrativos mínimos con enemigos simples y daño auditable, pero aún no
+implementa el combate táctico completo de D&D (iniciativa compleja, grid,
+economía de acciones, reacciones, salvaciones de muerte, resistencias,
+hechizos, balance automático ni IA táctica enemiga).
+
+*Pendiente (subfases futuras, sin numerar todavía).* F5.2 — integración
+narrativa de combate (sugerir/registrar consecuencia al terminar, sin
+automatizarlo demasiado). Más adelante: iniciativa/turnos más ricos,
+condiciones, ataques con tirada real, si el diseño narrativo lo justifica.
 
 ---
 

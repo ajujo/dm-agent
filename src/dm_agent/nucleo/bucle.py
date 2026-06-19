@@ -12,8 +12,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from dm_agent.estado.combate import GestorCombateNarrativo
 from dm_agent.estado.eventos import RegistroEventosEstado
 from dm_agent.estado.gestor import GestorEstado
+from dm_agent.herramientas.combate import crear_tools_combate
 from dm_agent.herramientas.dados import crear_tool_dados
 from dm_agent.herramientas.entidades import crear_tools_entidades
 from dm_agent.herramientas.ficha import crear_tools_ficha
@@ -62,6 +64,7 @@ def _crear_registro(
     cierre: CierreSesionNarrativa,
     dir_sesiones: Path,
     entidades_narrativas: GestorEntidadesNarrativas,
+    combate: GestorCombateNarrativo,
 ) -> RegistroHerramientas:
     registro = RegistroHerramientas()
     registro.registrar(crear_tool_dados())
@@ -78,6 +81,8 @@ def _crear_registro(
     for tool in crear_tools_sesion(cierre, dir_sesiones):
         registro.registrar(tool)
     for tool in crear_tools_entidades(entidades_narrativas):
+        registro.registrar(tool)
+    for tool in crear_tools_combate(combate, registro_eventos):
         registro.registrar(tool)
     return registro
 
@@ -125,6 +130,7 @@ class SesionInteractiva:
         self.registro_eventos = RegistroEventosEstado(raiz_storage)
         self.memoria_narrativa = GestorMemoriaNarrativa(raiz_storage)
         self.entidades_narrativas = GestorEntidadesNarrativas(raiz_storage)
+        self.combate = GestorCombateNarrativo(raiz_storage)
         self.resumidor = ResumidorNarrativo(self.cliente, self.memoria_narrativa)
         self.cierre = CierreSesionNarrativa(self.cliente, self.memoria_narrativa)
         self.registro = _crear_registro(
@@ -135,6 +141,7 @@ class SesionInteractiva:
             self.cierre,
             self.dir_sesiones,
             self.entidades_narrativas,
+            self.combate,
         )
         self.system_prompt = cargar_prompt(SYSTEM_DM_MINIMO)
 
