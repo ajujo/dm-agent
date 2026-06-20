@@ -220,5 +220,21 @@ def test_esquemas_disponibles_contienen_tools_combate(entorno):
     esperados = {
         "combate_iniciar", "combate_estado", "combate_anadir_enemigo",
         "combate_dano_enemigo", "combate_terminar",
+        "combate_tirar_iniciativa", "combate_turno_actual", "combate_avanzar_turno",
     }
     assert esperados <= nombres
+
+
+def test_dispatch_api_tirar_iniciativa(entorno, monkeypatch):
+    reg, _, _ = entorno
+    res1 = _iniciar(reg)
+    combate_id = res1.datos["combate"]["id"]
+    monkeypatch.setattr(
+        "dm_agent.herramientas.combate._tirar_d20", lambda mod, semilla: 10 + mod
+    )
+    res = reg.dispatch_api(
+        "combate_tirar_iniciativa", ctx=None, campaña_id=CAMP, combate_id=combate_id,
+        personaje={"id": "pj_tyr", "mod_destreza": 2},
+    )
+    assert res.ok
+    assert len(res.datos["orden_iniciativa"]) == 2

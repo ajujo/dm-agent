@@ -136,12 +136,17 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 ### #F5-01 — Combate narrativo mínimo — ✅ HECHO (F5.1, distancias revisadas en F5.1.1)
 - **Estado.** Esquemas `EnemigoCombate`/`CombateNarrativo` (`esquemas/combate.py`). `GestorCombateNarrativo` (`estado/combate.py`): un JSON por combate (`combates/<combate_id>.json`) + referencia de combate activo por campaña (`combates/activo.json`, solo el `combate_id`, nunca el combate completo). Tools `combate.{iniciar,estado,añadir_enemigo,daño_enemigo,terminar}` (`herramientas/combate.py`), con eventos auditables (`combate_iniciado`, `enemigo_añadido`, `daño_enemigo`, `combate_terminado`) vía `RegistroEventosEstado`. Distancias narrativas (`cuerpo_a_cuerpo`/`corta`/`media`/`larga`/`fuera_de_alcance`, revisadas en F5.1.1 desde `cerca`/`media`/`lejos`/`fuera_de_alcance` para acercarse al vocabulario D&D); sin grid/casillas. El daño al personaje jugador sigue pasando por `hp_xp.aplicar_daño`; sin XP automática. Docs: `docs/estado/combate.md`, `docs/tools/combate.md`, [ADR-0017](../decisiones/0017-dnd55-narrativo-solitario.md). Tests: `tests/test_combate_narrativo.py`, `tests/test_tools_combate.py`.
 - **Decisión técnica.** `combate.iniciar` crea el combate ya en estado `activo` directamente (sin paso `preparando` expuesto vía tool en F5.1); `activo.json` guarda solo una referencia por simplicidad y para evitar desincronización con el contenido real del combate. F5.1.1 fue deliberadamente **no** un rename a `conflicto.*`/`participante`: se conserva `combate.*`/`EnemigoCombate` y el vocabulario D&D; solo cambian los valores de `distancia`.
-- **Pendiente:** integración con memoria narrativa (sugerir/registrar consecuencia al terminar combate, #F5-02); iniciativa narrativa, turnos, reacciones, ataques de oportunidad narrativos, flanqueo narrativo, ventaja/desventaja narrativa (preparado en docs por F5.1.1, sin implementar); ataques con tirada real si el diseño narrativo lo justifica más adelante.
+- **Pendiente:** integración con memoria narrativa (sugerir/registrar consecuencia al terminar combate, #F5-03); reacciones/ataques de oportunidad narrativos, flanqueo narrativo, ventaja/desventaja narrativa (preparado en docs, sin implementar, #F5-03); ataques con tirada real si el diseño narrativo lo justifica más adelante.
 - **P.** P1.
-### #F5-02 — Integración narrativa de combate (iniciativa narrativa, turnos, reacciones, ataques de oportunidad narrativos, flanqueo narrativo, ventaja/desventaja narrativa, sugerir/registrar consecuencia al terminar)
-### #F5-03 — Skill `dirigir-combate`
-### #F5-04 — Reglas básicas más ricas (ataque con tirada, condiciones) — solo si D17 lo justifica
-### #F5-05 — Fixtures: enemigos low-level reutilizables
+### #F5-02 — Iniciativa clásica y turnos narrativos — ✅ HECHO (F5.2)
+- **Estado.** `1d20 + mod_destreza` para personaje y enemigos (tirada de enemigos automática, D-COMBATE-01/02). Esquema `EntradaIniciativa` y campos `CombateNarrativo.{orden_iniciativa,indice_turno_actual,ronda}`, `EnemigoCombate.{mod_destreza,iniciativa}` (opcionales, sin migración). Tools `combate.{tirar_iniciativa,turno_actual,avanzar_turno}` con eventos `iniciativa_tirada`/`turno_avanzado`. Orden: mayor iniciativa primero, empate personaje > enemigo, empate entre enemigos estable por nombre/id. Reutiliza el motor de dados existente (`herramientas/dados.py`); determinista con `semilla` para tests. Docs: `docs/estado/combate.md`, `docs/tools/combate.md`, [ADR-0018](../decisiones/0018-combate-dnd-narrativo.md). Tests: `tests/test_iniciativa_turnos.py`, ampliación de `tests/test_tools_combate.py`/`tests/test_combate_narrativo.py`.
+- **Decisión técnica.** No hay modo heroico/gritty global (D-COMBATE-03): la dificultad depende del encuentro/aventura. Reacciones/ataques de oportunidad quedan como propuesta + confirmación del jugador (D-COMBATE-04), no como mecánica automática — ningún automatismo se implementó en F5.2.
+- **Pendiente:** ataques completos con tirada contra CA; aplicar de verdad flanqueo/ventaja-desventaja narrativos y la confirmación de reacciones/ataques de oportunidad propuestos; sorpresa.
+- **P.** P1.
+### #F5-03 — Integración narrativa de combate (reacciones/ataques de oportunidad propuestos con confirmación, flanqueo narrativo, ventaja/desventaja narrativa, sugerir/registrar consecuencia al terminar)
+### #F5-04 — Skill `dirigir-combate`
+### #F5-05 — Reglas básicas más ricas (ataque con tirada, condiciones) — solo si D17 lo justifica
+### #F5-06 — Fixtures: enemigos low-level reutilizables
 - **P.** P1.
 
 ---

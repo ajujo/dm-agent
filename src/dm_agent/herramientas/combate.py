@@ -1,15 +1,24 @@
-"""Tools de combate narrativo mínimo (F5.1, distancias revisadas en F5.1.1).
+"""Tools de combate narrativo mínimo (F5.1, distancias revisadas en F5.1.1,
+iniciativa/turnos añadidos en F5.2).
 
 `combate.iniciar`, `combate.estado`, `combate.añadir_enemigo`,
-`combate.daño_enemigo`, `combate.terminar`.
+`combate.daño_enemigo`, `combate.terminar`, `combate.tirar_iniciativa`,
+`combate.turno_actual`, `combate.avanzar_turno`.
 
 Combate narrativo en el sentido de D17: teatro de la mente, sin grid, sin
-casillas, sin iniciativa compleja, sin economía de acciones. Se conserva el
-vocabulario de combate de D&D (enemigo, ataque, daño, estado, distancia) pero
-se resuelve de forma conversacional, sin geometría exacta. El daño al
+casillas, sin economía de acciones completa. Se conserva el vocabulario de
+combate de D&D (enemigo, ataque, daño, estado, distancia, iniciativa, turno)
+pero se resuelve de forma conversacional, sin geometría exacta. El daño al
 personaje jugador sigue pasando por `hp_xp.aplicar_daño`; estas tools solo
-gestionan el estado de los enemigos simples dentro de la escena. Cada
-mutación registra un `Evento` auditable, igual que `hp_xp.*` (F3.4).
+gestionan el estado de los enemigos simples y el orden de turnos dentro de la
+escena. Cada mutación registra un `Evento` auditable, igual que `hp_xp.*`
+(F3.4).
+
+La iniciativa es clásica: 1d20 + modificador de Destreza (D-COMBATE-01). El
+DM Agent tira automáticamente por los enemigos (D-COMBATE-02); el jugador
+sigue resolviendo la suya. Las tiradas usan `dm_agent.herramientas.dados.tirar`
+(mismo motor que `dados.tirar`); con `semilla` son deterministas para tests,
+sin ella son aleatorias de verdad en runtime.
 """
 
 from __future__ import annotations
@@ -19,11 +28,12 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from dm_agent.esquemas.combate import CombateNarrativo, EnemigoCombate
+from dm_agent.esquemas.combate import CombateNarrativo, EnemigoCombate, EntradaIniciativa
 from dm_agent.esquemas.evento import crear_evento
 from dm_agent.estado.combate import ErrorCombateNoEncontrado, GestorCombateNarrativo
 from dm_agent.estado.eventos import RegistroEventosEstado
 from dm_agent.herramientas.base import ResultadoHerramienta
+from dm_agent.herramientas.dados import tirar as tirar_dados
 
 _ACTOR_DM = "dm"
 
@@ -76,6 +86,39 @@ def _estado_tras_daño(hp_actual: int, hp_max: int) -> str:
 
 def _generar_id_combate() -> str:
     return f"combate_{uuid.uuid4().hex[:8]}"
+
+
+def _validar_mod_destreza(valor: Any) -> tuple[int | None, str | None]:
+    """Valida un `mod_destreza` recibido por args (no el del esquema). None -> 0."""
+    if valor is None:
+        return 0, None
+    if isinstance(valor, bool) or not isinstance(valor, int):
+        return None, "'mod_destreza' debe ser un entero"
+    if valor < -10 or valor > 10:
+        return None, "'mod_destreza' debe estar entre -10 y 10"
+    return valor, None
+
+
+def _tirar_d20(mod: int, semilla: int | None) -> int:
+    """1d20 + mod, vía el motor de dados existente (D-COMBATE-01)."""
+    expr = f"1d20{mod:+d}"
+    return tirar_dados(expr, semilla=semilla).total
+
+
+def _semilla_participante(semilla_base: int | None, indice: int) -> int | None:
+    """Deriva una semilla distinta por participante a partir de una base (tests).
+
+    Sin `semilla_base`, devuelve None: cada tirada usa entropía real e
+    independiente (runtime).
+    """
+    if semilla_base is None:
+        return None
+    return semilla_base + indice
+
+
+def _orden_iniciativa_orden(entrada: EntradaIniciativa) -> tuple[int, int, str, str]:
+    """Clave de orden: iniciativa descendente; empate -> personaje gana; luego nombre/id estable."""
+    return (-entrada.iniciativa, 0 if entrada.es_personaje else 1, entrada.nombre, entrada.participante_id)
 
 
 class _ToolCombateBase:
@@ -404,14 +447,287 @@ class _ToolTerminar(_ToolCombateBase):
         )
 
 
+class _ToolTirarIniciativa(_ToolCombateBase):
+    nombre = "combate.tirar_iniciativa"
+    descripcion = (
+        "Tira iniciativa clásica (1d20 + mod. Destreza) para el personaje y, automáticamente, "
+        "para cada enemigo del combate (D-COMBATE-01/02). Guarda el orden, pone ronda=1 e "
+        "indice_turno_actual=0. No implementa sorpresa."
+    )
+    modifica = ["combate", "eventos"]
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "campaña_id": {"type": "string"},
+            "combate_id": {"type": "string"},
+            "personaje": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "nombre": {"type": "string"},
+                    "mod_destreza": {"type": "integer", "minimum": -10, "maximum": 10},
+                },
+                "required": ["id"],
+                "additionalProperties": False,
+            },
+            "enemigos": {
+                "type": "array",
+                "description": "Modificadores de Destreza por enemigo_id; si falta, se usa 0.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "mod_destreza": {"type": "integer", "minimum": -10, "maximum": 10},
+                    },
+                    "required": ["id"],
+                    "additionalProperties": False,
+                },
+            },
+            "semilla": {
+                "type": "integer",
+                "description": "Semilla opcional para tiradas reproducibles (tests/depuración).",
+            },
+        },
+        "required": ["campaña_id", "combate_id", "personaje"],
+        "additionalProperties": False,
+    }
+
+    def ejecutar(self, ctx: Any, **args: Any) -> ResultadoHerramienta:
+        campaña_id = args.get("campaña_id")
+        combate, err = self._cargar(campaña_id, args.get("combate_id"))
+        if err:
+            return err
+        assert combate is not None
+
+        personaje = args.get("personaje")
+        if not isinstance(personaje, dict) or not personaje.get("id"):
+            return ResultadoHerramienta(ok=False, errores=["falta 'personaje.id'"])
+        personaje_id = personaje["id"]
+        if personaje_id != combate.personaje_id:
+            return ResultadoHerramienta(
+                ok=False,
+                errores=[
+                    f"'personaje.id' ({personaje_id!r}) no coincide con el personaje del "
+                    f"combate ({combate.personaje_id!r})"
+                ],
+            )
+        mod_pj, error_mod = _validar_mod_destreza(personaje.get("mod_destreza"))
+        if error_mod:
+            return ResultadoHerramienta(ok=False, errores=[error_mod])
+        assert mod_pj is not None
+
+        overrides_raw = args.get("enemigos", [])
+        overrides: dict[str, Any] = {}
+        for o in overrides_raw:
+            if not isinstance(o, dict) or not o.get("id"):
+                return ResultadoHerramienta(ok=False, errores=["cada entrada de 'enemigos' requiere 'id'"])
+            overrides[o["id"]] = o
+
+        semilla = args.get("semilla")
+        idx_semilla = 0
+
+        iniciativa_pj = _tirar_d20(mod_pj, _semilla_participante(semilla, idx_semilla))
+        idx_semilla += 1
+        entradas = [
+            EntradaIniciativa(
+                participante_id=personaje_id,
+                nombre=personaje.get("nombre", personaje_id),
+                tipo="personaje",
+                iniciativa=iniciativa_pj,
+                es_personaje=True,
+            )
+        ]
+
+        nuevos_enemigos = []
+        for enemigo in combate.enemigos:
+            override = overrides.get(enemigo.id)
+            if override is not None and "mod_destreza" in override:
+                mod_en, error_mod_en = _validar_mod_destreza(override["mod_destreza"])
+                if error_mod_en:
+                    return ResultadoHerramienta(ok=False, errores=[error_mod_en])
+            else:
+                mod_en = enemigo.mod_destreza if enemigo.mod_destreza is not None else 0
+            assert mod_en is not None
+
+            iniciativa_en = _tirar_d20(mod_en, _semilla_participante(semilla, idx_semilla))
+            idx_semilla += 1
+
+            nuevos_enemigos.append(
+                enemigo.model_copy(update={"mod_destreza": mod_en, "iniciativa": iniciativa_en})
+            )
+            entradas.append(
+                EntradaIniciativa(
+                    participante_id=enemigo.id,
+                    nombre=enemigo.nombre,
+                    tipo="enemigo",
+                    iniciativa=iniciativa_en,
+                    es_personaje=False,
+                )
+            )
+
+        entradas.sort(key=_orden_iniciativa_orden)
+
+        combate_actualizado = combate.model_copy(
+            update={
+                "enemigos": nuevos_enemigos,
+                "orden_iniciativa": entradas,
+                "indice_turno_actual": 0,
+                "ronda": 1,
+            }
+        )
+        self.gestor.guardar(combate_actualizado)
+
+        self.eventos.registrar(
+            campaña_id,
+            crear_evento(
+                "iniciativa_tirada",
+                actor=_ACTOR_DM,
+                objetivo=combate.id,
+                tool=self.nombre,
+                datos={
+                    "campaña_id": campaña_id,
+                    "combate_id": combate.id,
+                    "orden_iniciativa": [e.model_dump(mode="json") for e in entradas],
+                    "ronda": 1,
+                },
+            ),
+        )
+        return ResultadoHerramienta(
+            ok=True,
+            datos={
+                "combate_id": combate.id,
+                "orden_iniciativa": [e.model_dump(mode="json") for e in entradas],
+                "indice_turno_actual": 0,
+                "ronda": 1,
+                "combate": combate_actualizado.model_dump(mode="json"),
+            },
+        )
+
+
+class _ToolTurnoActual(_ToolCombateBase):
+    nombre = "combate.turno_actual"
+    descripcion = (
+        "Consulta la entrada actual del orden de iniciativa y la ronda. "
+        "No modifica nada ni registra evento."
+    )
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "campaña_id": {"type": "string"},
+            "combate_id": {"type": "string"},
+        },
+        "required": ["campaña_id", "combate_id"],
+        "additionalProperties": False,
+    }
+
+    def ejecutar(self, ctx: Any, **args: Any) -> ResultadoHerramienta:
+        campaña_id = args.get("campaña_id")
+        combate, err = self._cargar(campaña_id, args.get("combate_id"))
+        if err:
+            return err
+        assert combate is not None
+
+        if not combate.orden_iniciativa:
+            return ResultadoHerramienta(
+                ok=False, errores=[f"no se ha tirado iniciativa en {combate.id!r}"]
+            )
+        entrada = combate.orden_iniciativa[combate.indice_turno_actual]
+        return ResultadoHerramienta(
+            ok=True,
+            datos={
+                "combate_id": combate.id,
+                "turno_actual": entrada.model_dump(mode="json"),
+                "indice_turno_actual": combate.indice_turno_actual,
+                "ronda": combate.ronda,
+            },
+        )
+
+
+class _ToolAvanzarTurno(_ToolCombateBase):
+    nombre = "combate.avanzar_turno"
+    descripcion = (
+        "Avanza al siguiente turno del orden de iniciativa. Si llega al final, vuelve al "
+        "primero y aumenta la ronda. Registra evento turno_avanzado."
+    )
+    modifica = ["combate", "eventos"]
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "campaña_id": {"type": "string"},
+            "combate_id": {"type": "string"},
+            "motivo": {"type": "string"},
+        },
+        "required": ["campaña_id", "combate_id"],
+        "additionalProperties": False,
+    }
+
+    def ejecutar(self, ctx: Any, **args: Any) -> ResultadoHerramienta:
+        campaña_id = args.get("campaña_id")
+        combate, err = self._cargar(campaña_id, args.get("combate_id"))
+        if err:
+            return err
+        assert combate is not None
+
+        if not combate.orden_iniciativa:
+            return ResultadoHerramienta(
+                ok=False, errores=[f"no se ha tirado iniciativa en {combate.id!r}"]
+            )
+
+        entrada_anterior = combate.orden_iniciativa[combate.indice_turno_actual]
+        nuevo_indice = combate.indice_turno_actual + 1
+        nueva_ronda = combate.ronda
+        if nuevo_indice >= len(combate.orden_iniciativa):
+            nuevo_indice = 0
+            nueva_ronda += 1
+        entrada_actual = combate.orden_iniciativa[nuevo_indice]
+
+        combate_actualizado = combate.model_copy(
+            update={"indice_turno_actual": nuevo_indice, "ronda": nueva_ronda}
+        )
+        self.gestor.guardar(combate_actualizado)
+
+        motivo = args.get("motivo")
+        self.eventos.registrar(
+            campaña_id,
+            crear_evento(
+                "turno_avanzado",
+                actor=_ACTOR_DM,
+                objetivo=entrada_actual.participante_id,
+                tool=self.nombre,
+                motivo=motivo,
+                datos={
+                    "campaña_id": campaña_id,
+                    "combate_id": combate.id,
+                    "turno_anterior": entrada_anterior.participante_id,
+                    "turno_actual": entrada_actual.participante_id,
+                    "ronda": nueva_ronda,
+                    "motivo": motivo,
+                },
+            ),
+        )
+        return ResultadoHerramienta(
+            ok=True,
+            datos={
+                "combate_id": combate.id,
+                "turno_actual": entrada_actual.model_dump(mode="json"),
+                "indice_turno_actual": nuevo_indice,
+                "ronda": nueva_ronda,
+                "combate": combate_actualizado.model_dump(mode="json"),
+            },
+        )
+
+
 def crear_tools_combate(
     gestor: GestorCombateNarrativo, registro_eventos: RegistroEventosEstado
 ) -> list[Any]:
-    """Crea las cinco tools de combate enlazadas al gestor y al registro de eventos."""
+    """Crea las ocho tools de combate enlazadas al gestor y al registro de eventos."""
     return [
         _ToolIniciar(gestor, registro_eventos),
         _ToolEstado(gestor, registro_eventos),
         _ToolAñadirEnemigo(gestor, registro_eventos),
         _ToolDañoEnemigo(gestor, registro_eventos),
         _ToolTerminar(gestor, registro_eventos),
+        _ToolTirarIniciativa(gestor, registro_eventos),
+        _ToolTurnoActual(gestor, registro_eventos),
+        _ToolAvanzarTurno(gestor, registro_eventos),
     ]

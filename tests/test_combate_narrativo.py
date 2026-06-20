@@ -1,9 +1,9 @@
-"""Tests de esquemas y GestorCombateNarrativo (F5.1). Usan tmp_path; sin red."""
+"""Tests de esquemas y GestorCombateNarrativo (F5.1, iniciativa F5.2). Usan tmp_path; sin red."""
 
 import pytest
 from pydantic import ValidationError
 
-from dm_agent.esquemas.combate import CombateNarrativo, EnemigoCombate
+from dm_agent.esquemas.combate import CombateNarrativo, EnemigoCombate, EntradaIniciativa
 from dm_agent.estado.combate import ErrorCombateNoEncontrado, GestorCombateNarrativo
 
 CAMP = "campana_demo"
@@ -50,6 +50,42 @@ def test_crear_combate_valido():
     assert combate.estado == "activo"
     assert combate.turno == 0
     assert len(combate.enemigos) == 1
+
+
+def test_entrada_iniciativa_valida():
+    entrada = EntradaIniciativa(
+        participante_id="pj_tyr", nombre="Tyr", tipo="personaje", iniciativa=15, es_personaje=True
+    )
+    assert entrada.iniciativa == 15
+    assert entrada.es_personaje is True
+
+
+def test_combate_acepta_orden_de_iniciativa():
+    entradas = [
+        EntradaIniciativa(participante_id="pj_tyr", nombre="Tyr", tipo="personaje", iniciativa=15, es_personaje=True),
+        EntradaIniciativa(participante_id="rata_1", nombre="Rata gigante", tipo="enemigo", iniciativa=8),
+    ]
+    combate = _combate(orden_iniciativa=entradas, indice_turno_actual=0, ronda=1)
+    assert len(combate.orden_iniciativa) == 2
+    assert combate.orden_iniciativa[0].participante_id == "pj_tyr"
+    assert combate.ronda == 1
+    assert combate.indice_turno_actual == 0
+
+
+def test_enemigo_mod_destreza_e_iniciativa_son_opcionales():
+    enemigo = _enemigo()
+    assert enemigo.mod_destreza is None
+    assert enemigo.iniciativa is None
+    enemigo_con_mod = _enemigo(mod_destreza=2, iniciativa=14)
+    assert enemigo_con_mod.mod_destreza == 2
+    assert enemigo_con_mod.iniciativa == 14
+
+
+def test_rechaza_mod_destreza_fuera_de_rango():
+    with pytest.raises(ValidationError):
+        _enemigo(mod_destreza=11)
+    with pytest.raises(ValidationError):
+        _enemigo(mod_destreza=-11)
 
 
 def test_guardar_y_cargar_combate(tmp_path):

@@ -1,6 +1,6 @@
-# Tools `combate.*` (F5.1, distancias revisadas en F5.1.1)
+# Tools `combate.*` (F5.1, distancias revisadas en F5.1.1, iniciativa/turnos en F5.2)
 
-> Módulo: `dm_agent.herramientas.combate` · Fase: F5.1 / F5.1.1
+> Módulo: `dm_agent.herramientas.combate` · Fase: F5.1 / F5.1.1 / F5.2
 
 ## Propósito
 
@@ -23,6 +23,9 @@ persistencia. El daño al **personaje jugador** sigue pasando por
 | `combate.añadir_enemigo` | `combate_anadir_enemigo` | sí | `enemigo_añadido` |
 | `combate.daño_enemigo` | `combate_dano_enemigo` | sí | `daño_enemigo` |
 | `combate.terminar` | `combate_terminar` | sí | `combate_terminado` |
+| `combate.tirar_iniciativa` | `combate_tirar_iniciativa` | sí | `iniciativa_tirada` |
+| `combate.turno_actual` | `combate_turno_actual` | no | no |
+| `combate.avanzar_turno` | `combate_avanzar_turno` | sí | `turno_avanzado` |
 
 ## `combate_iniciar`
 
@@ -133,6 +136,63 @@ campaña queda sin combate activo). `resultado`/`motivo` son texto libre que
 se registra en el evento auditable; no se persisten como campo del combate.
 **No otorga XP automáticamente**: usa `hp_xp.otorgar_xp` aparte.
 
+## `combate_tirar_iniciativa`
+
+```json
+{
+  "campaña_id": "campana_demo",
+  "combate_id": "combate_001",
+  "personaje": {
+    "id": "pj_tyr",
+    "nombre": "Tyr",
+    "mod_destreza": 2
+  },
+  "enemigos": [
+    {"id": "rata_1", "mod_destreza": 1}
+  ]
+}
+```
+
+Requeridos: `campaña_id`, `combate_id`, `personaje.id` (debe coincidir con el
+`personaje_id` del combate). Tira `1d20 + mod_destreza` para el personaje y,
+automáticamente, para cada enemigo del combate (D-COMBATE-01/02): el array
+`enemigos` solo aporta modificadores de Destreza por `id`; si un enemigo del
+combate no aparece ahí (ni tiene `mod_destreza` propio guardado), se usa `0`.
+Opcional `semilla` (entero) para tiradas reproducibles en tests/depuración;
+sin ella, las tiradas son aleatorias de verdad.
+
+Orden resultante (mayor iniciativa primero): empate entre personaje y
+enemigo lo gana el personaje; empate entre enemigos se resuelve por
+`nombre`, luego `id`. Pone `ronda=1` e `indice_turno_actual=0`. No implementa
+sorpresa. Devuelve `combate_id`, `orden_iniciativa`, `indice_turno_actual`,
+`ronda` y el `combate` completo actualizado.
+
+## `combate_turno_actual`
+
+```json
+{"campaña_id": "campana_demo", "combate_id": "combate_001"}
+```
+
+Requeridos: `campaña_id`, `combate_id`. Devuelve la entrada actual del orden
+de iniciativa (`turno_actual`) y la `ronda`. No modifica nada ni registra
+evento. Si no se ha tirado iniciativa en este combate, devuelve error.
+
+## `combate_avanzar_turno`
+
+```json
+{
+  "campaña_id": "campana_demo",
+  "combate_id": "combate_001",
+  "motivo": "Tyr termina su acción"
+}
+```
+
+Requeridos: `campaña_id`, `combate_id`. Avanza `indice_turno_actual` al
+siguiente participante del `orden_iniciativa`; si llega al final, vuelve a 0
+y aumenta `ronda` en 1. Si no se ha tirado iniciativa, devuelve error.
+Devuelve `combate_id`, `turno_actual` (nueva entrada), `indice_turno_actual`,
+`ronda` y el `combate` completo actualizado.
+
 ## Eventos auditables
 
 Cada mutación registra un `Evento` (F3.1) en `eventos.jsonl` vía
@@ -144,16 +204,22 @@ Cada mutación registra un `Evento` (F3.1) en `eventos.jsonl` vía
 | `enemigo_añadido` | `campaña_id`, `combate_id`, `enemigo_id`, `nombre` |
 | `daño_enemigo` | `campaña_id`, `combate_id`, `enemigo_id`, `cantidad`, `hp_antes`, `hp_despues`, `estado`, `motivo` |
 | `combate_terminado` | `campaña_id`, `combate_id`, `resultado`, `motivo` |
+| `iniciativa_tirada` | `campaña_id`, `combate_id`, `orden_iniciativa`, `ronda` |
+| `turno_avanzado` | `campaña_id`, `combate_id`, `turno_anterior`, `turno_actual`, `ronda`, `motivo` |
 
 `combate_estado` no registra evento (es de solo lectura).
+
+`combate_estado`, `combate_turno_actual` no registran evento (son de solo
+lectura).
 
 ## Errores
 
 `campaña_id`/`personaje_id`/`combate_id`/`enemigo_id` vacíos o faltantes,
 combate inexistente, enemigo inexistente en el combate, id de enemigo
-duplicado, `cantidad` inválida, o combate activo ya en curso al iniciar uno
-nuevo → `ResultadoHerramienta(ok=False, errores=[...])`. Sin tracebacks al
-LLM.
+duplicado, `cantidad`/`mod_destreza` inválidos, `personaje.id` que no
+coincide con el del combate, combate activo ya en curso al iniciar uno
+nuevo, o iniciativa no tirada todavía al consultar/avanzar turno →
+`ResultadoHerramienta(ok=False, errores=[...])`. Sin tracebacks al LLM.
 
 ## Distancias (`EnemigoCombate.distancia`)
 
@@ -161,18 +227,27 @@ Cinco valores narrativos (sin espacios, ver
 [`../estado/combate.md`](../estado/combate.md#distancias-relativas)):
 `cuerpo_a_cuerpo`, `corta`, `media`, `larga`, `fuera_de_alcance`.
 
-## Limitaciones (F5.1 / F5.1.1)
+## Reacciones y ataques de oportunidad (D-COMBATE-04)
 
-- Sin grid/casillas, pies/pulgadas exactos, iniciativa real, economía de
-  acciones, reacciones mecánicas, ataques de oportunidad mecánicos,
-  cobertura mecánica, flanqueo mecánico ni áreas de efecto medidas. Estas
+No implementado todavía. En fases futuras el agente podrá **proponer** una
+reacción o un ataque de oportunidad narrativo cuando la ficción lo
+justifique (p. ej. alguien abandona `cuerpo_a_cuerpo` de forma arriesgada),
+pero **el jugador deberá confirmarlo antes de aplicarlo** — nunca se
+aplicará automáticamente.
+
+## Limitaciones (F5.1 / F5.1.1 / F5.2)
+
+- Sin grid/casillas, pies/pulgadas exactos, economía de acciones completa,
+  ataques completos (con CA) ni IA táctica enemiga.
+- Sin reacciones ni ataques de oportunidad **mecánicos** (solo propuesta +
+  confirmación del jugador, en fases futuras).
+- Sin flanqueo ni cobertura mecánicos, sin áreas de efecto medidas. Estas
   reglas se reinterpretan de forma narrativa (ver
-  [`../estado/combate.md`](../estado/combate.md#reglas-tácticas-adaptables-no-eliminadas-reinterpretadas)),
-  no se implementan como mecánica todavía.
-- Sin salvaciones de muerte, resistencias/vulnerabilidades ni hechizos.
-- Sin XP automática, balance automático, IA táctica enemiga ni bestiario
-  completo.
+  [`../estado/combate.md`](../estado/combate.md#reglas-tácticas-adaptables-no-eliminadas-reinterpretadas)).
+- Sin sorpresa, salvaciones de muerte, resistencias/vulnerabilidades ni
+  hechizos.
+- Sin XP automática, balance automático ni bestiario completo.
 - Sin inyección de combate al contexto narrativo (ver
   [`../estado/combate.md`](../estado/combate.md#memoria-narrativa)).
 - El LLM no está obligado a usar estas tools: el DM decide cuándo una escena
-  amerita abrir un combate narrativo.
+  amerita abrir un combate narrativo, tirar iniciativa o avanzar turno.
