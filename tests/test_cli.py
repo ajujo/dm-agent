@@ -57,6 +57,35 @@ def test_repl_envia_texto_al_agente():
     assert "eco:hola mundo" in salidas
 
 
+# --- F6.4.1: espacios iniciales/finales no deben impedir reconocer comandos -
+
+
+def test_repl_tool_con_espacios_iniciales_se_reconoce_como_comando():
+    llamadas_procesar = []
+    llamadas_tool = []
+    ctx = SimpleNamespace(
+        procesar=lambda t: llamadas_procesar.append(t) or "no debería llamarse",
+        ejecutar_tool_manual=lambda linea: llamadas_tool.append(linea) or "[tool] ok",
+    )
+    code, salidas = _repl_con_inputs(
+        ctx, ['   /tool combate_atacar_enemigo {"a": 1}', "/salir"]
+    )
+
+    assert code == 0
+    assert llamadas_procesar == []  # nunca se envió al LLM
+    assert len(llamadas_tool) == 1
+    assert any("[tool] ok" in s for s in salidas)
+
+
+def test_repl_ayuda_con_espacios_iniciales_se_reconoce_como_comando():
+    ctx = SimpleNamespace()  # /ayuda no toca ctx
+    code, salidas = _repl_con_inputs(ctx, ["   /ayuda", "/salir"])
+
+    assert code == 0
+    texto = "\n".join(salidas)
+    assert "Comandos disponibles" in texto
+
+
 def test_perfil_inexistente_error_claro(capsys):
     code = main(["--perfil", "no_existe_perfil"])
     assert code == 2

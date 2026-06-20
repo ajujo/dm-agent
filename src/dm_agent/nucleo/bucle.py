@@ -328,6 +328,9 @@ def repl(
             escribir("\nHasta la próxima.")
             return 0
 
+        # F6.4.1: strip() (no solo lstrip()) antes de comparar contra comandos,
+        # para que espacios iniciales/finales accidentales (p. ej. " /tool ...")
+        # no hagan que la línea se trate como texto narrativo para el LLM.
         texto = entrada.strip()
         if not texto:
             continue
