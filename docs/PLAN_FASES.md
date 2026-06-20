@@ -254,6 +254,53 @@ daño, iniciativa, memoria narrativa, RAG ni streaming.**
   una capa independiente para reducir la *probabilidad* de que el modelo
   necesite simular nada, no un sustituto de la disciplina existente.
 
+---
+
+## F6.3 — Robustez contra tool calls duplicadas, respuestas vacías y tool explícita no ejecutada
+
+> Igual que F6.1/F6.1.1/F6.2: no es parte de "Fase 6" de creación de mundo.
+> Tres fallos de robustez observados ya con tool calls reales funcionando
+> (F6.2): el modelo repitió `combate_proponer_reaccion` dos veces con los
+> mismos argumentos (dos reacciones pendientes duplicadas); después, al
+> pedirle confirmar una reacción con `combate_resolver_reaccion`, el modelo
+> devolvió un turno sin texto y sin tool call, dejando la reacción pendiente
+> sin resolver y sin ningún error visible.
+
+**Objetivo.** ✅ **Implementada** (commit `fix: harden agent tool execution
+loop`). Tres defensas en `AgenteDM`, todas dentro del agent loop, ninguna
+toca mecánica de juego:
+
+- **(A) Deduplicación de tool calls idénticas en el mismo turno**
+  (`src/dm_agent/nucleo/agente.py`): dentro de `responder()`, un conjunto
+  `tool_calls_ejecutadas` (clave `(nombre_api, argumentos_json con
+  sort_keys)`) persiste mientras dura el turno (across iteraciones del
+  bucle `max_iter_turno`, se reinicia en cada llamada a `responder()`). Si
+  el modelo repite exactamente la misma tool+argumentos, la segunda vez no
+  se llama `dispatch_api`: se le devuelve un resultado sintético
+  ("ya se ejecutó con estos mismos argumentos en este turno") y en
+  `--debug` se imprime `[debug] tool duplicada ignorada: ...`. Argumentos
+  distintos, o la misma llamada en un turno posterior, se ejecutan con
+  normalidad.
+- **(B) Respuesta vacía sin tool calls**: si la respuesta final no tiene
+  texto útil (`content` vacío/solo espacios) y tampoco hubo tool calls en
+  ese paso, se devuelve un mensaje seguro pidiendo reformular en vez de un
+  turno en blanco; en `--debug`, `[debug] respuesta vacía del modelo sin
+  tool calls`.
+- **(C) Tool explícita mencionada pero no ejecutada**: si el mensaje del
+  usuario nombra por su nombre API alguna de las tools expuestas en el turno
+  (`_tools_para_turno`) y, al llegar a una respuesta sin tool calls, esa
+  tool todavía no se ejecutó de verdad, se dispara **un único** reintento
+  corrector (mensaje explícito pidiendo llamar la tool real, prohibiendo
+  JSON/XML). Si tras el reintento sigue sin ejecutarla, la respuesta final
+  es "No se ha podido ejecutar la herramienta solicitada: ..." — nunca se
+  inventa que se ejecutó.
+- **Prioridad de chequeos** (en este orden, dentro de la rama "sin tool
+  calls"): primero F6.1/F6.1.1 (pseudo-call simulada → su propio reintento,
+  sin parsear/ejecutar nada); solo si no hay pseudo-call, (C) tool explícita
+  no ejecutada; solo si tampoco aplica (C), (B) respuesta vacía. Esto
+  garantiza que F6.3 nunca reemplaza ni debilita la disciplina anti-pseudo-
+  call de F6.1/F6.1.1.
+
 **Archivos.** `src/dm_agent/prompts/system_dm_minimo.md`,
 `src/dm_agent/nucleo/agente.py`.
 

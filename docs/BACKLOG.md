@@ -197,6 +197,23 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Pendiente:** las palabras clave son las observadas en pruebas manuales reales; si aparece un mensaje claro que no dispara ninguna categoría (y por tanto cae al fallback de "todas las tools"), se añade la palabra que falte en `seleccion_tools.py` en vez de rediseñar el mecanismo.
 - **P.** P0 (bloqueaba `combate_atacar_enemigo` en pruebas manuales reales pese a F6.1.1).
 
+## F6.3 — Robustez contra tool calls duplicadas, respuestas vacías y tool explícita no ejecutada
+
+> Igual que F6.1/F6.1.1/F6.2: no es parte de "F6 — Creación de mundo" (más abajo).
+
+### #F6.3-01 — Deduplicar tool calls idénticas en el mismo turno — ✅ HECHO (F6.3)
+- **Estado.** Con tool calls reales ya funcionando (F6.2), una prueba manual real mostró al modelo llamando `combate_proponer_reaccion` dos veces con los mismos argumentos en el mismo turno, dejando dos reacciones pendientes duplicadas (hubo que caducar una a mano). Corregido en `AgenteDM.responder` (`src/dm_agent/nucleo/agente.py`): un conjunto `tool_calls_ejecutadas` con clave `(nombre_api, argumentos_json normalizado con sort_keys)` persiste durante el turno; la segunda llamada idéntica no se despacha de verdad, se responde con un resultado sintético de "ya se ejecutó" y se imprime `[debug] tool duplicada ignorada: ...`. Argumentos distintos o el mismo par tool+argumentos en un turno posterior se ejecutan con normalidad (el conjunto se reinicia en cada `responder()`).
+- **P.** P0 (corrompía el estado del combate con reacciones pendientes duplicadas).
+
+### #F6.3-02 — Mensaje seguro ante respuesta vacía sin tool calls — ✅ HECHO (F6.3)
+- **Estado.** Tras confirmar una reacción con `combate_resolver_reaccion`, el modelo devolvió un turno sin texto y sin tool call; no hubo error visible y la reacción quedó pendiente sin que el usuario supiera que el turno no había hecho nada. Corregido: si la respuesta final no tiene texto útil y no hubo tool calls en ese paso, `AgenteDM.responder` devuelve un mensaje seguro pidiendo reformular, e imprime `[debug] respuesta vacía del modelo sin tool calls`.
+- **P.** P0 (turno silenciosamente vacío, sin ninguna señal de que algo falló).
+
+### #F6.3-03 — Reintento si el usuario pide una tool explícita y no se ejecuta — ✅ HECHO (F6.3)
+- **Estado.** El mismo caso de `combate_resolver_reaccion` no ejecutada (ver #F6.3-02) es además un caso de "el usuario nombró la tool por su nombre API y no se llamó de verdad". `_tool_mencionada_no_ejecutada` (`src/dm_agent/nucleo/agente.py`) detecta esto comparando el mensaje del usuario contra los nombres de las tools expuestas en el turno (`_tools_para_turno`, F6.2) y los nombres de tools ya ejecutadas de verdad. Si hay una mención sin ejecutar, dispara un único reintento corrector; si tras el reintento sigue sin ejecutarla, la respuesta final es "No se ha podido ejecutar la herramienta solicitada: ..." (nunca se afirma que se ejecutó). Esta comprobación tiene prioridad sobre #F6.3-02 pero **no** sobre F6.1/F6.1.1 (si hay una pseudo-call JSON/XML, manda esa disciplina primero, sin parsear/ejecutar nada).
+- **Decisión técnica (común a las tres).** Ninguna de las tres defensas cambia mecánica de juego ni toca esquemas de combate/ataque/daño/iniciativa/inventario/ficha/memoria narrativa: viven enteramente en el agent loop (`AgenteDM.responder`). Tests: `tests/test_agent_tool_robustness.py`.
+- **P.** P0 (mismo incidente real que #F6.3-02).
+
 ---
 
 ## F6 — Creación de mundo / campaña / aventura

@@ -29,6 +29,15 @@ cada turno, `_tools_para_turno` filtra las tools que se exponen al LLM según
 la intención del mensaje (`seleccion_tools.seleccionar_tools_para_turno`):
 menos tools por turno, más probabilidad de que el modelo elija una real. En
 `--debug` siempre se imprime qué tools quedaron expuestas.
+
+F6.3: tres fallos de robustez observados ya con tool calls reales (F6.2):
+(a) el modelo repite la misma tool call (mismo nombre + mismos argumentos)
+dos veces en el mismo turno → se ignora la repetición exacta sin volver a
+ejecutar la tool; (b) el modelo termina el turno sin texto útil y sin
+ninguna tool call → se devuelve un mensaje seguro en vez de un turno vacío;
+(c) el usuario pide explícitamente una tool por su nombre API y el modelo no
+la llama de verdad → un reintento corrector una vez, y si sigue sin
+llamarla, un mensaje seguro que no afirma que se ejecutó.
 """
 
 from __future__ import annotations
@@ -76,6 +85,35 @@ def _contiene_tool_call_simulada(texto: str) -> bool:
     esto.
     """
     return bool(_PATRON_TOOL_CALL_SIMULADA.search(texto))
+
+
+_MENSAJE_TOOL_EXPLICITA_NO_EJECUTADA = (
+    "El usuario ha pedido explícitamente usar la herramienta {nombre}, pero no la has "
+    "llamado realmente. Debes llamar esa herramienta real mediante el sistema de tools. "
+    "No escribas JSON, XML ni texto explicando la llamada. Si no puedes llamarla, responde "
+    "claramente que no puedes."
+)
+
+_MENSAJE_RESPUESTA_VACIA = (
+    "No he recibido una respuesta útil del modelo ni se ha ejecutado ninguna herramienta. "
+    "Repite la instrucción de forma más directa o usa una sola herramienta."
+)
+
+
+def _tool_mencionada_no_ejecutada(
+    entrada_usuario: str, nombres_expuestos: list[str], nombres_ejecutados: set[str]
+) -> str | None:
+    """Si el usuario nombró explícitamente (por su nombre API) alguna de las
+    tools expuestas en este turno y esa tool todavía no se ha ejecutado de
+    verdad, devuelve su nombre. `None` si no hay ninguna tool mencionada
+    pendiente."""
+    texto = entrada_usuario.lower()
+    for nombre in nombres_expuestos:
+        if nombre in nombres_ejecutados:
+            continue
+        if nombre.lower() in texto:
+            return nombre
+    return None
 
 
 class AgenteDM:
@@ -172,7 +210,12 @@ class AgenteDM:
         self.sesion.registrar_usuario(entrada_usuario)
         messages = self._messages_base()
         tools = self._tools_para_turno(entrada_usuario)
+        nombres_expuestos = [t["function"]["name"] for t in (tools or [])]
         reintento_simulada_usado = False
+        reintento_tool_explicita_usado = False
+        # (nombre_api, argumentos_json_normalizados) ya ejecutados en este turno (F6.3-A).
+        tool_calls_ejecutadas: set[tuple[str, str]] = set()
+        nombres_tools_ejecutadas: set[str] = set()
 
         for _ in range(self.max_iter_turno):
             resp = self.cliente.chat(messages, tools=tools)
@@ -192,6 +235,45 @@ class AgenteDM:
                             {"role": "user", "content": _MENSAJE_CORRECTIVO_TOOL_SIMULADA}
                         )
                         continue
+                    self.sesion.registrar_asistente(content)
+                    return content
+
+                # F6.3-C: el usuario pidió explícitamente una tool expuesta y no se
+                # ha ejecutado de verdad todavía → reintento corrector una vez.
+                tool_pendiente = _tool_mencionada_no_ejecutada(
+                    entrada_usuario, nombres_expuestos, nombres_tools_ejecutadas
+                )
+                if tool_pendiente is not None:
+                    if not reintento_tool_explicita_usado:
+                        reintento_tool_explicita_usado = True
+                        if self.debug:
+                            print(
+                                "[debug] tool explícita mencionada pero no ejecutada: "
+                                f"{tool_pendiente}"
+                            )
+                        messages.append({"role": "assistant", "content": content})
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": _MENSAJE_TOOL_EXPLICITA_NO_EJECUTADA.format(
+                                    nombre=tool_pendiente
+                                ),
+                            }
+                        )
+                        continue
+                    mensaje_final = (
+                        f"No se ha podido ejecutar la herramienta solicitada: {tool_pendiente}."
+                    )
+                    self.sesion.registrar_asistente(mensaje_final)
+                    return mensaje_final
+
+                # F6.3-B: ni texto útil ni tool calls → mensaje seguro, no un turno vacío.
+                if not content.strip():
+                    if self.debug:
+                        print("[debug] respuesta vacía del modelo sin tool calls")
+                    self.sesion.registrar_asistente(_MENSAJE_RESPUESTA_VACIA)
+                    return _MENSAJE_RESPUESTA_VACIA
+
                 self.sesion.registrar_asistente(content)
                 return content
 
@@ -212,8 +294,31 @@ class AgenteDM:
             )
 
             for tc in resp.tool_calls:
+                clave = (tc.nombre_api, json.dumps(tc.argumentos, sort_keys=True))
+                if clave in tool_calls_ejecutadas:
+                    # F6.3-A: misma tool + mismos argumentos ya ejecutada en este turno.
+                    if self.debug:
+                        print(f"[debug] tool duplicada ignorada: {tc.nombre_api}({tc.argumentos})")
+                    resultado_dup = {
+                        "aviso": (
+                            f"tool duplicada ignorada: {tc.nombre_api} ya se ejecutó con estos "
+                            "mismos argumentos en este turno"
+                        )
+                    }
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "name": tc.nombre_api,
+                            "content": json.dumps(resultado_dup, ensure_ascii=False),
+                        }
+                    )
+                    continue
+
+                tool_calls_ejecutadas.add(clave)
                 self.sesion.registrar_tool_call(tc.nombre_api, tc.argumentos)
                 resultado, ok = self._ejecutar_tool_call(tc)
+                nombres_tools_ejecutadas.add(tc.nombre_api)
                 self.sesion.registrar_tool_result(tc.nombre_api, resultado, ok=ok)
                 if self.debug:
                     print(f"[debug] tool {tc.nombre_api}({tc.argumentos}) -> ok={ok} {resultado}")

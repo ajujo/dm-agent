@@ -310,6 +310,23 @@ La prueba se considera válida si, contra un endpoint real:
     `combate_atacar_personaje`/`combate_registrar_accion_turno`, no las 14
     tools de combate ni las de ficha/inventario/memoria. En `--debug`, cada
     turno imprime `[debug] tools expuestas: ...` con la lista real.
+16. **El agente no repite una tool call idéntica en el mismo turno** (F6.3):
+    si el modelo intenta ejecutar la misma tool con los mismos argumentos
+    dos veces dentro de un único turno (p. ej. dos `combate_proponer_reaccion`
+    para el mismo enemigo), la segunda se ignora sin volver a llamar la tool
+    real; en `--debug` se ve `[debug] tool duplicada ignorada: ...`. Llamadas
+    con argumentos distintos, o la misma llamada en un turno posterior, se
+    ejecutan con normalidad.
+17. **El agente no deja un turno completamente vacío.** Si el modelo termina
+    el turno sin texto útil y sin ninguna tool call (F6.3), `dm-agent`
+    devuelve un mensaje seguro pidiendo reformular, en vez de un turno sin
+    respuesta visible; en `--debug` se ve
+    `[debug] respuesta vacía del modelo sin tool calls`.
+18. **Si el usuario pide explícitamente una tool por su nombre** (p. ej.
+    "usa `combate_resolver_reaccion`...") **y el modelo no la llama de
+    verdad**, `dm-agent` reintenta una vez con un mensaje corrector (F6.3); si
+    tras el reintento sigue sin llamarla, responde que no se pudo ejecutar
+    esa herramienta, sin afirmar que sí se hizo.
 
 ---
 
@@ -357,6 +374,25 @@ La prueba se considera válida si, contra un endpoint real:
   template/parser del servidor (no algo que `dm-agent` pueda corregir desde
   el cliente). `dm-agent` nunca ejecuta esos textos por seguridad — ver F6.1/
   F6.1.1 más arriba.
+- **Si el modelo repite una misma tool call en un turno** (mismo nombre y
+  mismos argumentos, p. ej. dos `combate_proponer_reaccion` para el mismo
+  enemigo): `dm-agent` ignora duplicados exactos (F6.3) — la segunda llamada
+  no se ejecuta de verdad, se le devuelve al modelo un resultado sintético
+  indicando que ya se ejecutó en este turno, y en `--debug` aparece
+  `[debug] tool duplicada ignorada: ...`. No es un bug si ves la tool real
+  solo una vez en el log aunque el modelo "la pidiera" dos veces.
+- **Si el modelo devuelve una respuesta vacía sin tool calls** (sin texto y
+  sin ninguna llamada real): `dm-agent` lo muestra como error seguro (F6.3,
+  `[debug] respuesta vacía del modelo sin tool calls`) en vez de devolver un
+  turno en blanco. Pide reformular la instrucción de forma más directa.
+- **Si el usuario pide explícitamente una tool y el modelo no la llama**
+  (p. ej. "usa `combate_resolver_reaccion` para confirmar..." y el modelo
+  responde con texto o nada, sin tool call real): `dm-agent` reintenta una
+  vez (F6.3, `[debug] tool explícita mencionada pero no ejecutada: ...`); si
+  tras el reintento sigue sin llamarla, responde
+  "No se ha podido ejecutar la herramienta solicitada: ..." — nunca afirma
+  que se ejecutó si no hay una línea `[debug] tool <nombre>(...) -> ok=...`
+  real respaldándolo.
 - **El modelo no llama tools** (solo narra): falta
   `--enable-auto-tool-choice`/`--tool-call-parser` en el servidor, o el
   modelo es demasiado pequeño para tool-calling fiable. Usa un modelo más
