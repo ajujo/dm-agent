@@ -1,9 +1,18 @@
-"""Tests de esquemas y GestorCombateNarrativo (F5.1, iniciativa F5.2). Usan tmp_path; sin red."""
+"""Tests de esquemas y GestorCombateNarrativo (F5.1, iniciativa F5.2, reacciones F5.5).
+
+Usan tmp_path; sin red.
+"""
 
 import pytest
 from pydantic import ValidationError
 
-from dm_agent.esquemas.combate import CombateNarrativo, EnemigoCombate, EntradaIniciativa
+from dm_agent.esquemas.combate import (
+    AccionTurno,
+    CombateNarrativo,
+    EnemigoCombate,
+    EntradaIniciativa,
+    PropuestaReaccion,
+)
 from dm_agent.estado.combate import ErrorCombateNoEncontrado, GestorCombateNarrativo
 
 CAMP = "campana_demo"
@@ -86,6 +95,40 @@ def test_rechaza_mod_destreza_fuera_de_rango():
         _enemigo(mod_destreza=11)
     with pytest.raises(ValidationError):
         _enemigo(mod_destreza=-11)
+
+
+def test_crear_accion_turno_valida():
+    accion = AccionTurno(turno_participante_id="pj_tyr", tipo="accion", id="accion_1")
+    assert accion.consumida is False
+    assert accion.version_schema == 1
+
+
+def test_crear_propuesta_reaccion_valida():
+    propuesta = PropuestaReaccion(
+        id="reaccion_1", combate_id="combate_001", ronda=1, tipo="ataque_oportunidad",
+        quien_reacciona_id="rata_1", objetivo_id="pj_tyr",
+    )
+    assert propuesta.estado == "pendiente"
+    assert propuesta.confirmada is False
+    assert propuesta.version_schema == 1
+
+
+def test_combate_acepta_acciones_turno_y_propuestas_reaccion():
+    accion = AccionTurno(id="accion_1", turno_participante_id="pj_tyr", tipo="accion")
+    propuesta = PropuestaReaccion(
+        id="reaccion_1", combate_id="combate_001", ronda=1, tipo="ataque_oportunidad",
+        quien_reacciona_id="rata_1", objetivo_id="pj_tyr",
+    )
+    combate = _combate(acciones_turno=[accion], propuestas_reaccion=[propuesta])
+    assert len(combate.acciones_turno) == 1
+    assert len(combate.propuestas_reaccion) == 1
+    assert combate.propuestas_reaccion[0].estado == "pendiente"
+
+
+def test_combate_sin_acciones_ni_propuestas_devuelve_listas_vacias():
+    combate = _combate()
+    assert combate.acciones_turno == []
+    assert combate.propuestas_reaccion == []
 
 
 def test_guardar_y_cargar_combate(tmp_path):

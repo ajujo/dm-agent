@@ -225,6 +225,8 @@ def test_esquemas_disponibles_contienen_tools_combate(entorno):
         "combate_dano_enemigo", "combate_terminar",
         "combate_tirar_iniciativa", "combate_turno_actual", "combate_avanzar_turno",
         "combate_atacar_enemigo", "combate_atacar_personaje",
+        "combate_registrar_accion_turno", "combate_proponer_reaccion",
+        "combate_resolver_reaccion", "combate_listar_reacciones",
     }
     assert esperados <= nombres
 

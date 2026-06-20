@@ -1,10 +1,12 @@
-# ADR-0018 — Combate D&D narrativo: iniciativa, turnos, ataques y ventaja/desventaja sin grid
+# ADR-0018 — Combate D&D narrativo: iniciativa, turnos, ataques, ventaja/desventaja y reacciones propuestas sin grid
 
-- **Estado:** Aceptada (F5.1.1 / F5.2 / F5.3 / F5.4, 2026-06-20)
+- **Estado:** Aceptada (F5.1.1 / F5.2 / F5.3 / F5.4 / F5.5, 2026-06-20)
 - **Implementación:** `combate.tirar_iniciativa`, `combate.turno_actual`,
   `combate.avanzar_turno` (F5.2); `combate.atacar_enemigo`,
   `combate.atacar_personaje` (F5.3, ventaja/desventaja y modificador
-  situacional añadidos en F5.4) — ver
+  situacional añadidos en F5.4); `combate.registrar_accion_turno`,
+  `combate.proponer_reaccion`, `combate.resolver_reaccion`,
+  `combate.listar_reacciones` (F5.5) — ver
   [`../estado/combate.md`](../estado/combate.md) y
   [`../tools/combate.md`](../tools/combate.md). Complementa
   [ADR-0017](0017-dnd55-narrativo-solitario.md), que fija el principio general
@@ -46,8 +48,10 @@ decidida por el DM (LLM) caso a caso, no por un parámetro de configuración.
 El agente puede **proponer** una reacción o un ataque de oportunidad
 narrativo cuando la ficción lo justifique (p. ej. alguien abandona
 `cuerpo_a_cuerpo` de forma arriesgada y sin cubrirse), pero **el jugador
-debe confirmarlo antes de que se aplique**. No hay aplicación automática de
-mecánica de reacciones en ninguna fase actual.
+debe confirmarlo antes de que se aplique**. Desde F5.5 existe la tool para
+proponer y resolver (`combate.proponer_reaccion`/`combate.resolver_reaccion`),
+pero ni proponer ni confirmar **aplican nada**: no hay aplicación
+automática de mecánica de reacciones en ninguna fase actual.
 
 ## Turnos narrativos, no turnos de tablero
 
@@ -162,6 +166,51 @@ de la escena, pero la decisión de si aplica de verdad la confirma el
 jugador antes de que la tool se llame con ese `modo_tirada` — mismo
 principio que D-COMBATE-04 para reacciones/ataques de oportunidad.
 
+## Acciones de turno y propuestas de reacción (F5.5)
+
+Dos piezas mínimas, sin motor completo de economía de acciones:
+
+### `AccionTurno` registra, no arbitra
+
+`combate.registrar_accion_turno` solo anota qué hizo un participante; no
+valida si "le quedaba acción", "acción adicional" o "reacción" disponible.
+`tipo` es texto libre (no `Literal`), igual que `EnemigoCombate.estado`:
+construir un árbitro de economía de acciones es explícitamente fuera de
+alcance ("no sobrevalides todavía"). Si `turno_participante_id` no coincide
+con el turno actual, la tool **avisa** (`aviso` en la respuesta) en vez de
+fallar — registrar fuera de turno puede ser legítimo (anotaciones a
+posteriori, jugadores narrando en paralelo, etc.), así que bloquear habría
+sido más perjudicial que útil.
+
+### `PropuestaReaccion` nunca se auto-aplica
+
+`combate.proponer_reaccion` crea la propuesta; `combate.resolver_reaccion`
+la mueve a `confirmada`/`rechazada`/`caducada`. **Ninguna de las dos tira
+dados ni toca HP.** Esto es deliberado y es el núcleo de D-COMBATE-04: si
+"confirmar" aplicara el ataque automáticamente, estaríamos construyendo el
+automatismo que estas fases evitan explícitamente. Aplicar de verdad una
+reacción confirmada exige una llamada aparte, explícita, del DM (LLM) a
+`combate.atacar_personaje`/`combate.atacar_enemigo` — el flujo completo
+(detectar → proponer → confirmar → **aplicar**) tiene cuatro pasos, y F5.5
+solo cubre los tres primeros como tools.
+
+### `estado` sí es un enum cerrado; `tipo` no
+
+A diferencia de `AccionTurno.tipo` (texto libre), `PropuestaReaccion.estado`
+es un `Literal` (`pendiente`/`confirmada`/`rechazada`/`aplicada`/`caducada`)
+porque `combate.resolver_reaccion` depende de esos valores exactos para
+decidir su comportamiento — no es vocabulario narrativo sugerido, es estado
+de máquina. `PropuestaReaccion.tipo` sí queda libre por la misma razón que
+en `AccionTurno`: es solo contexto narrativo de qué clase de reacción es.
+
+### `ronda`/`turno_participante_id` se derivan, no se piden
+
+`combate.proponer_reaccion` no exige `ronda` ni `turno_participante_id` en
+la entrada: se rellenan automáticamente desde
+`CombateNarrativo.ronda`/`orden_iniciativa[indice_turno_actual]` si ya se
+tiró iniciativa (si no, `turno_participante_id` queda `None`). Pedírselos
+al llamador habría sido redundante con datos que el combate ya tiene.
+
 ## Consecuencias
 
 - `EnemigoCombate` gana `mod_destreza` e `iniciativa` opcionales (default
@@ -185,6 +234,9 @@ principio que D-COMBATE-04 para reacciones/ataques de oportunidad.
   `motivo_modificador`), el comportamiento de `combate.atacar_enemigo`/
   `combate.atacar_personaje` es idéntico a F5.3 — los tres tienen default
   (`"normal"`, `0`, `null`) que reproducen exactamente la mecánica anterior.
+- `CombateNarrativo` gana `acciones_turno` (`AccionTurno[]`) y
+  `propuestas_reaccion` (`PropuestaReaccion[]`), ambos con default `[]`:
+  combates creados antes de F5.5 no necesitan migrarse.
 
 ## No implementado a propósito
 
@@ -203,7 +255,12 @@ RAG, memoria vectorial ni streaming.
 cobertura mecánica, condiciones completas, hechizos, áreas de efecto,
 salvaciones, IA enemiga, acciones/reacciones completas, acumulación
 compleja de múltiples ventajas/desventajas, XP automática, grid/casillas,
-RAG, memoria vectorial ni streaming. Solo queda la arquitectura y la
-documentación preparadas para fases futuras (F5.5: acciones del turno y
-propuesta de reacción, manteniendo siempre "el agente propone, el jugador
-confirma").
+RAG, memoria vectorial ni streaming.
+
+**F5.5:** motor completo de acción/acción adicional/reacción/movimiento,
+cálculo automático de flanqueo, ataques de oportunidad automáticos,
+reacciones automáticas (confirmar una propuesta **no** la aplica), cobertura
+mecánica, condiciones completas, hechizos, áreas, salvaciones, IA enemiga
+completa, XP automática, grid/casillas, RAG, memoria vectorial ni streaming.
+Solo queda la arquitectura y la documentación preparadas para fases
+futuras.

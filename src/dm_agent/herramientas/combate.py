@@ -1,11 +1,14 @@
 """Tools de combate narrativo mínimo (F5.1, distancias revisadas en F5.1.1,
 iniciativa/turnos añadidos en F5.2, ataques básicos contra CA en F5.3,
-ventaja/desventaja y modificadores situacionales en F5.4).
+ventaja/desventaja y modificadores situacionales en F5.4, acciones de turno
+y propuestas de reacción en F5.5).
 
 `combate.iniciar`, `combate.estado`, `combate.añadir_enemigo`,
 `combate.daño_enemigo`, `combate.terminar`, `combate.tirar_iniciativa`,
 `combate.turno_actual`, `combate.avanzar_turno`, `combate.atacar_enemigo`,
-`combate.atacar_personaje`.
+`combate.atacar_personaje`, `combate.registrar_accion_turno`,
+`combate.proponer_reaccion`, `combate.resolver_reaccion`,
+`combate.listar_reacciones`.
 
 Combate narrativo en el sentido de D17: teatro de la mente, sin grid, sin
 casillas, sin economía de acciones completa. Se conserva el vocabulario de
@@ -41,6 +44,18 @@ penalizador narrativo simple que se suma al total de ataque junto con
 `modificador_ataque`; `motivo_modificador` es texto libre para registrar por
 qué se aplicó. Sin estos campos nuevos, el comportamiento es idéntico a
 F5.3.
+
+Acciones de turno y reacciones (F5.5): `combate.registrar_accion_turno`
+solo anota qué hizo un participante (sin validar economía de
+acción/acción adicional/reacción/movimiento). `combate.proponer_reaccion`
+crea una `PropuestaReaccion` en estado `pendiente` para una reacción o
+ataque de oportunidad **narrativo** — no tira dados ni aplica daño.
+`combate.resolver_reaccion` la mueve a `confirmada`/`rechazada`/`caducada`
+según la decisión del jugador, pero **tampoco aplica nada**: si el DM quiere
+aplicar de verdad una reacción confirmada, debe llamar explícitamente a
+`combate.atacar_personaje`/`combate.atacar_enemigo` (D-COMBATE-04).
+`combate.listar_reacciones` consulta las propuestas de un combate,
+opcionalmente filtradas por `estado`.
 """
 
 from __future__ import annotations
@@ -52,7 +67,13 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from dm_agent.esquemas.combate import CombateNarrativo, EnemigoCombate, EntradaIniciativa
+from dm_agent.esquemas.combate import (
+    AccionTurno,
+    CombateNarrativo,
+    EnemigoCombate,
+    EntradaIniciativa,
+    PropuestaReaccion,
+)
 from dm_agent.esquemas.evento import crear_evento
 from dm_agent.esquemas.ficha import Ficha
 from dm_agent.estado.combate import ErrorCombateNoEncontrado, GestorCombateNarrativo
@@ -86,6 +107,14 @@ _SCHEMA_ENEMIGO: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+_ESTADOS_PROPUESTA = ("pendiente", "confirmada", "rechazada", "aplicada", "caducada")
+_DECISIONES_REACCION = ("confirmar", "rechazar", "caducar")
+_DECISION_A_ESTADO: dict[str, tuple[str, bool]] = {
+    "confirmar": ("confirmada", True),
+    "rechazar": ("rechazada", False),
+    "caducar": ("caducada", False),
+}
+
 
 def _errores_validacion(e: ValidationError) -> list[str]:
     return [f"{'.'.join(str(x) for x in err['loc'])}: {err['msg']}" for err in e.errors()]
@@ -113,6 +142,14 @@ def _estado_tras_daño(hp_actual: int, hp_max: int) -> str:
 
 def _generar_id_combate() -> str:
     return f"combate_{uuid.uuid4().hex[:8]}"
+
+
+def _generar_id_accion() -> str:
+    return f"accion_{uuid.uuid4().hex[:8]}"
+
+
+def _generar_id_propuesta() -> str:
+    return f"reaccion_{uuid.uuid4().hex[:8]}"
 
 
 def _validar_mod_destreza(valor: Any) -> tuple[int | None, str | None]:
@@ -1282,12 +1319,339 @@ class _ToolAtacarPersonaje(_ToolCombateBase):
         )
 
 
+class _ToolRegistrarAccionTurno(_ToolCombateBase):
+    nombre = "combate.registrar_accion_turno"
+    descripcion = (
+        "Registra una acción narrativa de un participante en su turno (sin validar economía "
+        "de acción/acción adicional/reacción/movimiento). No avanza turno por sí sola."
+    )
+    modifica = ["combate", "eventos"]
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "campaña_id": {"type": "string"},
+            "combate_id": {"type": "string"},
+            "turno_participante_id": {"type": "string"},
+            "tipo": {
+                "type": "string",
+                "description": (
+                    "Texto libre; sugeridos: accion, movimiento, accion_adicional, reaccion, "
+                    "interaccion, narrativa."
+                ),
+            },
+            "descripcion": {"type": "string"},
+            "consumida": {"type": "boolean", "default": False},
+        },
+        "required": ["campaña_id", "combate_id", "turno_participante_id", "tipo"],
+        "additionalProperties": False,
+    }
+
+    def ejecutar(self, ctx: Any, **args: Any) -> ResultadoHerramienta:
+        campaña_id = args.get("campaña_id")
+        combate, err = self._cargar(campaña_id, args.get("combate_id"))
+        if err:
+            return err
+        assert combate is not None
+
+        turno_participante_id = args.get("turno_participante_id")
+        tipo = args.get("tipo")
+        if not turno_participante_id or not tipo:
+            return ResultadoHerramienta(
+                ok=False, errores=["faltan 'turno_participante_id' y/o 'tipo'"]
+            )
+
+        descripcion = args.get("descripcion", "")
+        consumida = args.get("consumida", False)
+        if not isinstance(consumida, bool):
+            return ResultadoHerramienta(ok=False, errores=["'consumida' debe ser booleano"])
+
+        try:
+            accion = AccionTurno(
+                id=_generar_id_accion(),
+                turno_participante_id=turno_participante_id,
+                tipo=tipo,
+                descripcion=descripcion,
+                consumida=consumida,
+            )
+        except ValidationError as e:
+            return ResultadoHerramienta(ok=False, errores=_errores_validacion(e))
+
+        aviso = None
+        if combate.orden_iniciativa:
+            entrada_actual = combate.orden_iniciativa[combate.indice_turno_actual]
+            if entrada_actual.participante_id != turno_participante_id:
+                aviso = (
+                    f"'turno_participante_id' ({turno_participante_id!r}) no coincide con el "
+                    f"turno actual ({entrada_actual.participante_id!r}); se registra igualmente"
+                )
+
+        combate_actualizado = combate.model_copy(
+            update={"acciones_turno": [*combate.acciones_turno, accion]}
+        )
+        self.gestor.guardar(combate_actualizado)
+
+        self.eventos.registrar(
+            campaña_id,
+            crear_evento(
+                "accion_turno_registrada",
+                actor=_ACTOR_DM,
+                objetivo=turno_participante_id,
+                tool=self.nombre,
+                datos={
+                    "campaña_id": campaña_id,
+                    "combate_id": combate.id,
+                    "turno_participante_id": turno_participante_id,
+                    "tipo": tipo,
+                    "descripcion": descripcion,
+                    "consumida": consumida,
+                },
+            ),
+        )
+        return ResultadoHerramienta(
+            ok=True,
+            datos={
+                "combate_id": combate.id,
+                "accion": accion.model_dump(mode="json"),
+                "aviso": aviso,
+                "combate": combate_actualizado.model_dump(mode="json"),
+            },
+        )
+
+
+class _ToolProponerReaccion(_ToolCombateBase):
+    nombre = "combate.proponer_reaccion"
+    descripcion = (
+        "Propone una reacción o ataque de oportunidad narrativo (D-COMBATE-04): crea una "
+        "PropuestaReaccion en estado 'pendiente'. No tira dados ni aplica daño; solo propone."
+    )
+    modifica = ["combate", "eventos"]
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "campaña_id": {"type": "string"},
+            "combate_id": {"type": "string"},
+            "tipo": {
+                "type": "string",
+                "description": (
+                    "Texto libre; sugeridos: ataque_oportunidad, reaccion, ventaja_narrativa, "
+                    "desventaja_narrativa, flanqueo_narrativo, cobertura_narrativa."
+                ),
+            },
+            "quien_reacciona_id": {"type": "string"},
+            "objetivo_id": {"type": "string"},
+            "descripcion": {"type": "string"},
+            "motivo": {"type": "string"},
+        },
+        "required": ["campaña_id", "combate_id", "tipo", "quien_reacciona_id", "objetivo_id"],
+        "additionalProperties": False,
+    }
+
+    def ejecutar(self, ctx: Any, **args: Any) -> ResultadoHerramienta:
+        campaña_id = args.get("campaña_id")
+        combate, err = self._cargar(campaña_id, args.get("combate_id"))
+        if err:
+            return err
+        assert combate is not None
+
+        tipo = args.get("tipo")
+        quien_reacciona_id = args.get("quien_reacciona_id")
+        objetivo_id = args.get("objetivo_id")
+        if not tipo or not quien_reacciona_id or not objetivo_id:
+            return ResultadoHerramienta(
+                ok=False, errores=["faltan 'tipo', 'quien_reacciona_id' y/o 'objetivo_id'"]
+            )
+
+        turno_participante_id = (
+            combate.orden_iniciativa[combate.indice_turno_actual].participante_id
+            if combate.orden_iniciativa
+            else None
+        )
+        motivo = args.get("motivo")
+
+        try:
+            propuesta = PropuestaReaccion(
+                id=_generar_id_propuesta(),
+                combate_id=combate.id,
+                ronda=combate.ronda,
+                turno_participante_id=turno_participante_id,
+                tipo=tipo,
+                quien_reacciona_id=quien_reacciona_id,
+                objetivo_id=objetivo_id,
+                descripcion=args.get("descripcion", ""),
+                motivo=motivo,
+            )
+        except ValidationError as e:
+            return ResultadoHerramienta(ok=False, errores=_errores_validacion(e))
+
+        combate_actualizado = combate.model_copy(
+            update={"propuestas_reaccion": [*combate.propuestas_reaccion, propuesta]}
+        )
+        self.gestor.guardar(combate_actualizado)
+
+        self.eventos.registrar(
+            campaña_id,
+            crear_evento(
+                "reaccion_propuesta",
+                actor=_ACTOR_DM,
+                objetivo=objetivo_id,
+                tool=self.nombre,
+                motivo=motivo,
+                datos={
+                    "campaña_id": campaña_id,
+                    "combate_id": combate.id,
+                    "propuesta_id": propuesta.id,
+                    "tipo": tipo,
+                    "quien_reacciona_id": quien_reacciona_id,
+                    "objetivo_id": objetivo_id,
+                    "motivo": motivo,
+                    "estado": propuesta.estado,
+                },
+            ),
+        )
+        return ResultadoHerramienta(
+            ok=True,
+            datos={
+                "combate_id": combate.id,
+                "propuesta": propuesta.model_dump(mode="json"),
+                "combate": combate_actualizado.model_dump(mode="json"),
+            },
+        )
+
+
+class _ToolResolverReaccion(_ToolCombateBase):
+    nombre = "combate.resolver_reaccion"
+    descripcion = (
+        "Resuelve una PropuestaReaccion pendiente: confirmar/rechazar/caducar. No aplica el "
+        "ataque/reacción por sí misma: para aplicarla de verdad hay que llamar explícitamente "
+        "a combate.atacar_personaje/combate.atacar_enemigo (D-COMBATE-04)."
+    )
+    modifica = ["combate", "eventos"]
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "campaña_id": {"type": "string"},
+            "combate_id": {"type": "string"},
+            "propuesta_id": {"type": "string"},
+            "decision": {"type": "string", "enum": list(_DECISIONES_REACCION)},
+            "motivo": {"type": "string"},
+        },
+        "required": ["campaña_id", "combate_id", "propuesta_id", "decision"],
+        "additionalProperties": False,
+    }
+
+    def ejecutar(self, ctx: Any, **args: Any) -> ResultadoHerramienta:
+        campaña_id = args.get("campaña_id")
+        combate, err = self._cargar(campaña_id, args.get("combate_id"))
+        if err:
+            return err
+        assert combate is not None
+
+        propuesta_id = args.get("propuesta_id")
+        decision = args.get("decision")
+        if not propuesta_id:
+            return ResultadoHerramienta(ok=False, errores=["falta 'propuesta_id'"])
+        if decision not in _DECISION_A_ESTADO:
+            return ResultadoHerramienta(
+                ok=False, errores=[f"'decision' debe ser una de {_DECISIONES_REACCION}"]
+            )
+
+        propuesta = next((p for p in combate.propuestas_reaccion if p.id == propuesta_id), None)
+        if propuesta is None:
+            return ResultadoHerramienta(
+                ok=False, errores=[f"propuesta no existe en este combate: {propuesta_id!r}"]
+            )
+
+        estado_anterior = propuesta.estado
+        estado_nuevo, confirmada_nueva = _DECISION_A_ESTADO[decision]
+        motivo = args.get("motivo")
+        propuesta_actualizada = propuesta.model_copy(
+            update={"estado": estado_nuevo, "confirmada": confirmada_nueva}
+        )
+        nuevas_propuestas = [
+            propuesta_actualizada if p.id == propuesta_id else p for p in combate.propuestas_reaccion
+        ]
+        combate_actualizado = combate.model_copy(update={"propuestas_reaccion": nuevas_propuestas})
+        self.gestor.guardar(combate_actualizado)
+
+        self.eventos.registrar(
+            campaña_id,
+            crear_evento(
+                "reaccion_resuelta",
+                actor=_ACTOR_DM,
+                objetivo=propuesta.objetivo_id,
+                tool=self.nombre,
+                motivo=motivo,
+                datos={
+                    "campaña_id": campaña_id,
+                    "combate_id": combate.id,
+                    "propuesta_id": propuesta_id,
+                    "decision": decision,
+                    "estado_anterior": estado_anterior,
+                    "estado_nuevo": estado_nuevo,
+                    "motivo": motivo,
+                },
+            ),
+        )
+        return ResultadoHerramienta(
+            ok=True,
+            datos={
+                "combate_id": combate.id,
+                "propuesta": propuesta_actualizada.model_dump(mode="json"),
+                "combate": combate_actualizado.model_dump(mode="json"),
+            },
+        )
+
+
+class _ToolListarReacciones(_ToolCombateBase):
+    nombre = "combate.listar_reacciones"
+    descripcion = (
+        "Lista las propuestas de reacción de un combate, opcionalmente filtradas por estado. "
+        "No modifica nada ni registra evento."
+    )
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "campaña_id": {"type": "string"},
+            "combate_id": {"type": "string"},
+            "estado": {"type": "string", "enum": list(_ESTADOS_PROPUESTA)},
+        },
+        "required": ["campaña_id", "combate_id"],
+        "additionalProperties": False,
+    }
+
+    def ejecutar(self, ctx: Any, **args: Any) -> ResultadoHerramienta:
+        campaña_id = args.get("campaña_id")
+        combate, err = self._cargar(campaña_id, args.get("combate_id"))
+        if err:
+            return err
+        assert combate is not None
+
+        estado_filtro = args.get("estado")
+        if estado_filtro is not None and estado_filtro not in _ESTADOS_PROPUESTA:
+            return ResultadoHerramienta(
+                ok=False, errores=[f"'estado' debe ser una de {_ESTADOS_PROPUESTA}"]
+            )
+
+        propuestas = combate.propuestas_reaccion
+        if estado_filtro is not None:
+            propuestas = [p for p in propuestas if p.estado == estado_filtro]
+
+        return ResultadoHerramienta(
+            ok=True,
+            datos={
+                "combate_id": combate.id,
+                "propuestas": [p.model_dump(mode="json") for p in propuestas],
+                "total": len(propuestas),
+            },
+        )
+
+
 def crear_tools_combate(
     gestor: GestorCombateNarrativo,
     registro_eventos: RegistroEventosEstado,
     gestor_estado: GestorEstado,
 ) -> list[Any]:
-    """Crea las diez tools de combate enlazadas a los gestores y al registro de eventos."""
+    """Crea las catorce tools de combate enlazadas a los gestores y al registro de eventos."""
     return [
         _ToolIniciar(gestor, registro_eventos),
         _ToolEstado(gestor, registro_eventos),
@@ -1299,4 +1663,8 @@ def crear_tools_combate(
         _ToolAvanzarTurno(gestor, registro_eventos),
         _ToolAtacarEnemigo(gestor, registro_eventos),
         _ToolAtacarPersonaje(gestor, registro_eventos, gestor_estado),
+        _ToolRegistrarAccionTurno(gestor, registro_eventos),
+        _ToolProponerReaccion(gestor, registro_eventos),
+        _ToolResolverReaccion(gestor, registro_eventos),
+        _ToolListarReacciones(gestor, registro_eventos),
     ]
