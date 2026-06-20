@@ -32,6 +32,19 @@ def test_rechaza_enemigo_con_hp_actual_mayor_que_hp_max():
         _enemigo(hp_actual=10)
 
 
+@pytest.mark.parametrize(
+    "distancia", ["cuerpo_a_cuerpo", "corta", "media", "larga", "fuera_de_alcance"]
+)
+def test_distancia_valida(distancia):
+    enemigo = _enemigo(distancia=distancia)
+    assert enemigo.distancia == distancia
+
+
+def test_rechaza_distancia_invalida():
+    with pytest.raises(ValidationError):
+        _enemigo(distancia="cerca")
+
+
 def test_crear_combate_valido():
     combate = _combate(enemigos=[_enemigo().model_dump()])
     assert combate.estado == "activo"

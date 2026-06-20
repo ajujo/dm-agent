@@ -17,7 +17,7 @@ _ENEMIGO_RATA = {
     "ca": 12,
     "estado": "activo",
     "descripcion": "Una rata enorme con ojos febriles.",
-    "distancia": "cerca",
+    "distancia": "cuerpo_a_cuerpo",
     "tags": ["bestia", "sotano"],
 }
 

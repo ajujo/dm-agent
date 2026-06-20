@@ -2,7 +2,10 @@
 
 - **Estado:** Aceptada (F3.2, 2026-06-19)
 - **Decisión abierta original:** D17
-- **Implementación:** ninguna todavía — esto es arquitectura y documentación.
+- **Implementación:** combate narrativo mínimo (F5.1, F5.1.1) es la primera
+  aplicación concreta de esta decisión — ver
+  [`../estado/combate.md`](../estado/combate.md). El resto (reglas adaptadas
+  generales, hechizos) sigue siendo solo arquitectura y documentación.
 
 ## Contexto
 
@@ -39,6 +42,37 @@ aprobadas por el usuario.
 3. **Preferencias de campaña del usuario.**
 
 La capa 3 prevalece sobre la 2, y la 2 sobre la 1, cuando hay conflicto.
+
+## Combate: vocabulario D&D, resolución narrativa
+
+El combate **sí** es una parte importante de D&D y `dm-agent` conserva su
+vocabulario (`combate`, `enemigo`, `iniciativa`, `turno`, `ataque`, `reacción`,
+`flanqueo`, `ataque de oportunidad`, `ventaja`/`desventaja`). Lo que cambia es
+**cómo se resuelve**: sin grid, sin casillas, sin pies/pulgadas exactos, sin
+conos/líneas/radios medidos. Posición y alcance se modelan como distancia
+relativa (`cuerpo_a_cuerpo`, `corta`, `media`, `larga`, `fuera_de_alcance`),
+no coordenadas — ver [`../estado/combate.md`](../estado/combate.md).
+
+### Reglas tácticas adaptables (no eliminadas, reinterpretadas)
+
+Reglas como flanqueo, ataques de oportunidad, cobertura, áreas de efecto o
+movimiento no se eliminan: se reinterpretan de forma narrativa cuando
+aparecen en la ficción, en vez de calcularse geométricamente.
+
+- **Flanqueo narrativo:** puede conceder ventaja si el enemigo está
+  distraído, acorralado o presionado desde dos frentes, sin calcular
+  casillas.
+- **Ataque de oportunidad narrativo:** puede activarse si alguien abandona
+  `cuerpo_a_cuerpo` de forma arriesgada y sin cubrirse, sin contar casillas.
+- **Cobertura narrativa:** puede dar ventaja/desventaja o modificar la
+  dificultad si la ficción lo justifica, sin geometría exacta.
+- **Área de efecto narrativa:** puede afectar a un objetivo, a varios
+  cercanos o a una zona, según la ficción, sin medir conos/radios.
+
+Ninguna de estas reinterpretaciones está implementada como mecánica todavía
+(F5.1.1 solo deja arquitectura y documentación preparadas); ver
+[`../estado/combate.md`](../estado/combate.md#pendiente-f52) para lo
+planificado en F5.2.
 
 ## Consecuencias
 

@@ -1,25 +1,64 @@
-# Combate narrativo mínimo (F5.1)
+# Combate narrativo mínimo (F5.1, distancias revisadas en F5.1.1)
 
 > Módulos: `dm_agent.esquemas.combate` (`EnemigoCombate`, `CombateNarrativo`) ·
 > `dm_agent.estado.combate` (`GestorCombateNarrativo`) ·
 > `dm_agent.herramientas.combate` (tools `combate.*`).
 
-## Combate narrativo, no táctico
+## El combate importa: vocabulario D&D, resolución narrativa
 
-Esto **no** es el combate táctico completo de D&D 5.5: no hay grid, casillas,
-pies/pulgadas, ataques de oportunidad, cobertura, flanqueo, áreas de efecto,
+El combate es una parte importante de D&D y `dm-agent` **conserva su
+vocabulario**: `combate`, `enemigo`, `iniciativa`, `turno`, `ataque`,
+`reacción`, `flanqueo`, `ataque de oportunidad`, `ventaja`/`desventaja`. Lo
+que cambia es cómo se **resuelve**: con teatro de la mente (D17) — distancias
+relativas, posición narrativa y consecuencias — en vez de grid, casillas,
+pies/pulgadas exactos, ataques de oportunidad mecánicos, cobertura
+milimétrica, flanqueo geométrico, áreas de efecto medidas en
 conos/líneas/radios, iniciativa compleja, economía completa de acciones,
-reacciones, salvaciones de muerte, resistencias/vulnerabilidades ni hechizos.
+reacciones mecánicas, salvaciones de muerte, resistencias/vulnerabilidades ni
+hechizos. Ver también [ADR-0017](../decisiones/0017-dnd55-narrativo-solitario.md#combate-vocabulario-dd-resolución-narrativa).
 
-Es una base mínima para sostener escenas de combate en **teatro de la mente**
-(D17): el DM (LLM) necesita recordar quién participa, quién está herido o
-caído, y cuándo termina la escena, sin simular reglas tácticas.
+Es una base mínima para sostener escenas de combate en teatro de la mente: el
+DM (LLM) necesita recordar quién participa, quién está herido o caído, y
+cuándo termina la escena, sin simular reglas tácticas de tablero (sin VTT
+encubierto).
 
-## Distancias abstractas
+### Reglas tácticas adaptables (no eliminadas, reinterpretadas)
+
+Reglas como flanqueo, ataques de oportunidad, cobertura, áreas o movimiento
+no se eliminan necesariamente: se reinterpretan de forma narrativa cuando
+aparecen en la ficción.
+
+- **Flanqueo narrativo:** puede conceder ventaja si el enemigo está
+  distraído, acorralado o presionado desde dos frentes, sin calcular
+  casillas.
+- **Ataque de oportunidad narrativo:** puede activarse si alguien abandona
+  `cuerpo_a_cuerpo` de forma arriesgada sin cubrirse, sin contar casillas.
+- **Cobertura narrativa:** puede dar ventaja/desventaja o modificar
+  dificultad si la ficción lo justifica, sin geometría exacta.
+- **Área de efecto narrativa:** puede afectar a un objetivo, varios cercanos
+  o una zona, según la ficción, sin medir conos/radios.
+
+Nada de esto está implementado como mecánica en F5.1.1: solo se deja la
+arquitectura y la documentación preparadas (ver
+[Pendiente (F5.2)](#pendiente-f52)).
+
+## Distancias relativas
 
 En vez de coordenadas/casillas, cada enemigo tiene una `distancia` narrativa
-opcional: `cerca`, `media`, `lejos`, `fuera_de_alcance`. Es solo descriptiva;
-no hay reglas de movimiento ni alcance que se calculen a partir de ella.
+opcional con cinco valores:
+
+| Valor | Significado |
+|---|---|
+| `cuerpo_a_cuerpo` | Cuerpo a cuerpo, agarrado, encima, ya trabado. |
+| `corta` | Se alcanza con un movimiento breve o acción inmediata. |
+| `media` | Requiere acercarse, exponerse o usar proyectiles. |
+| `larga` | Requiere maniobra, persecución, arma adecuada o escena de aproximación. |
+| `fuera_de_alcance` | No participa inmediatamente o está fuera del foco actual. |
+
+Es solo descriptiva; no hay reglas de movimiento ni alcance que se calculen a
+partir de ella. (En F5.1 estos valores eran `cerca`/`media`/`lejos`; F5.1.1
+los sustituye por los cinco anteriores para acercar el vocabulario al de D&D
+sin introducir geometría.)
 
 ## Esquemas
 
@@ -102,7 +141,23 @@ quien llama a `narrativa.registrar` o el cierre de sesión/resumen, a mano.
 F5.2 podrá integrar combate con memoria narrativa (p. ej. sugerir una entrada
 de consecuencia al terminar).
 
-## Limitaciones (F5.1)
+## Pendiente (F5.2)
+
+F5.1.1 solo deja arquitectura y documentación preparadas; nada de esto está
+implementado todavía:
+
+- **Iniciativa narrativa**: un orden de actuación ligero, sin tirada de
+  iniciativa mecánica exhaustiva ni tablero de turnos.
+- **Turnos**: usar `CombateNarrativo.turno` como algo más que un contador
+  simple (hoy no hay orden de turnos calculado).
+- **Reacciones narrativas**: respuestas fuera de turno justificadas por la
+  ficción, no por una economía de acciones formal.
+- **Ataques de oportunidad narrativos**: ver ejemplo más arriba.
+- **Flanqueo narrativo**: ver ejemplo más arriba.
+- **Ventaja/desventaja narrativa**: aplicada cuando la ficción lo justifique,
+  sin tabla de modificadores tácticos.
+
+## Limitaciones (F5.1 / F5.1.1)
 
 - Sin grid, casillas, pies/pulgadas ni reglas de movimiento.
 - Sin iniciativa compleja: `turno` es un contador simple, no hay orden de

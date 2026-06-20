@@ -1,10 +1,12 @@
-"""Tools de combate narrativo mínimo (F5.1).
+"""Tools de combate narrativo mínimo (F5.1, distancias revisadas en F5.1.1).
 
 `combate.iniciar`, `combate.estado`, `combate.añadir_enemigo`,
 `combate.daño_enemigo`, `combate.terminar`.
 
 Combate narrativo en el sentido de D17: teatro de la mente, sin grid, sin
-casillas, sin iniciativa compleja, sin economía de acciones. El daño al
+casillas, sin iniciativa compleja, sin economía de acciones. Se conserva el
+vocabulario de combate de D&D (enemigo, ataque, daño, estado, distancia) pero
+se resuelve de forma conversacional, sin geometría exacta. El daño al
 personaje jugador sigue pasando por `hp_xp.aplicar_daño`; estas tools solo
 gestionan el estado de los enemigos simples dentro de la escena. Cada
 mutación registra un `Evento` auditable, igual que `hp_xp.*` (F3.4).
@@ -35,7 +37,7 @@ _PROPS_ENEMIGO: dict[str, Any] = {
     "descripcion": {"type": "string"},
     "distancia": {
         "type": "string",
-        "enum": ["cerca", "media", "lejos", "fuera_de_alcance"],
+        "enum": ["cuerpo_a_cuerpo", "corta", "media", "larga", "fuera_de_alcance"],
     },
     "tags": {"type": "array", "items": {"type": "string"}},
 }

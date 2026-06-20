@@ -1,8 +1,10 @@
-"""Esquemas de combate narrativo mínimo (F5.1).
+"""Esquemas de combate narrativo mínimo (F5.1, distancias revisadas en F5.1.1).
 
 Pensado para teatro de la mente (D17): sin grid, sin casillas, sin iniciativa
-compleja. La posición se modela como una distancia abstracta (`cerca`,
-`media`, `lejos`, `fuera_de_alcance`), no coordenadas.
+compleja. La posición se modela como una distancia relativa (`cuerpo_a_cuerpo`,
+`corta`, `media`, `larga`, `fuera_de_alcance`), no coordenadas. Conserva
+vocabulario de combate de D&D (enemigo, ataque, daño, estado) pero lo resuelve
+de forma narrativa/conversacional, sin geometría exacta.
 
 `EnemigoCombate` es el enemigo simple dentro de una escena de combate.
 `CombateNarrativo` es la escena en sí: quién participa, en qué estado está
@@ -17,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from dm_agent.esquemas.comun import CadenaNoVacia
 
-Distancia = Literal["cerca", "media", "lejos", "fuera_de_alcance"]
+Distancia = Literal["cuerpo_a_cuerpo", "corta", "media", "larga", "fuera_de_alcance"]
 
 
 class EnemigoCombate(BaseModel):

@@ -1,12 +1,15 @@
-# Tools `combate.*` (F5.1)
+# Tools `combate.*` (F5.1, distancias revisadas en F5.1.1)
 
-> Módulo: `dm_agent.herramientas.combate` · Fase: F5.1
+> Módulo: `dm_agent.herramientas.combate` · Fase: F5.1 / F5.1.1
 
 ## Propósito
 
-Sostener escenas de combate **narrativo mínimo** (teatro de la mente, D17):
-crear la escena, añadir enemigos simples, consultar el estado, aplicar daño a
-enemigos y terminarla, todo con eventos auditables. Ver
+Sostener escenas de combate **narrativo** (teatro de la mente, D17): crear la
+escena, añadir enemigos simples, consultar el estado, aplicar daño a
+enemigos y terminarla, todo con eventos auditables. El combate sí es
+importante en D&D: se conserva su vocabulario (`combate`, `enemigo`, `daño`,
+`distancia`...), pero se resuelve de forma conversacional, sin grid ni
+medición exacta — ver
 [`../estado/combate.md`](../estado/combate.md) para el detalle de esquemas y
 persistencia. El daño al **personaje jugador** sigue pasando por
 [`hp_xp.md`](hp_xp.md) (`hp_xp.aplicar_daño`); estas tools no lo tocan.
@@ -38,7 +41,7 @@ persistencia. El daño al **personaje jugador** sigue pasando por
       "ca": 12,
       "estado": "activo",
       "descripcion": "Una rata enorme con ojos febriles.",
-      "distancia": "cerca",
+      "distancia": "cuerpo_a_cuerpo",
       "tags": ["bestia", "sotano"]
     }
   ]
@@ -152,10 +155,20 @@ duplicado, `cantidad` inválida, o combate activo ya en curso al iniciar uno
 nuevo → `ResultadoHerramienta(ok=False, errores=[...])`. Sin tracebacks al
 LLM.
 
-## Limitaciones (F5.1)
+## Distancias (`EnemigoCombate.distancia`)
 
-- Sin grid/casillas, iniciativa compleja, economía de acciones, reacciones,
-  ataques de oportunidad, cobertura, flanqueo ni áreas de efecto.
+Cinco valores narrativos (sin espacios, ver
+[`../estado/combate.md`](../estado/combate.md#distancias-relativas)):
+`cuerpo_a_cuerpo`, `corta`, `media`, `larga`, `fuera_de_alcance`.
+
+## Limitaciones (F5.1 / F5.1.1)
+
+- Sin grid/casillas, pies/pulgadas exactos, iniciativa real, economía de
+  acciones, reacciones mecánicas, ataques de oportunidad mecánicos,
+  cobertura mecánica, flanqueo mecánico ni áreas de efecto medidas. Estas
+  reglas se reinterpretan de forma narrativa (ver
+  [`../estado/combate.md`](../estado/combate.md#reglas-tácticas-adaptables-no-eliminadas-reinterpretadas)),
+  no se implementan como mecánica todavía.
 - Sin salvaciones de muerte, resistencias/vulnerabilidades ni hechizos.
 - Sin XP automática, balance automático, IA táctica enemiga ni bestiario
   completo.
