@@ -1,5 +1,6 @@
 """Tools de combate narrativo mínimo (F5.1, distancias revisadas en F5.1.1,
-iniciativa/turnos añadidos en F5.2, ataques básicos contra CA en F5.3).
+iniciativa/turnos añadidos en F5.2, ataques básicos contra CA en F5.3,
+ventaja/desventaja y modificadores situacionales en F5.4).
 
 `combate.iniciar`, `combate.estado`, `combate.añadir_enemigo`,
 `combate.daño_enemigo`, `combate.terminar`, `combate.tirar_iniciativa`,
@@ -29,6 +30,17 @@ daño al personaje en `combate.atacar_personaje` se aplica directamente sobre
 duplicar el evento de daño (ver ADR-0018). `combate.atacar_enemigo` no
 avanza turno automáticamente: el avance sigue siendo explícito vía
 `combate.avanzar_turno`.
+
+Ventaja/desventaja (F5.4, `modo_tirada`): normal tira 1d20; ventaja/
+desventaja tiran 2d20 y se quedan con el mayor/menor. Si la ficción tiene
+ventaja y desventaja a la vez, se cancelan — quien llama a la tool decide el
+`modo_tirada` final, no hay acumulación de múltiples ventajas/desventajas
+aquí. Natural 1/20 se evalúa sobre la tirada elegida tras ventaja/
+desventaja. `modificador_situacional` (-10..10) es un bonificador/
+penalizador narrativo simple que se suma al total de ataque junto con
+`modificador_ataque`; `motivo_modificador` es texto libre para registrar por
+qué se aplicó. Sin estos campos nuevos, el comportamiento es idéntico a
+F5.3.
 """
 
 from __future__ import annotations
@@ -138,15 +150,18 @@ def _orden_iniciativa_orden(entrada: EntradaIniciativa) -> tuple[int, int, str, 
 
 @dataclass(slots=True)
 class ResultadoAtaque:
-    """Resultado de resolver un ataque contra CA (F5.3).
+    """Resultado de resolver un ataque contra CA (F5.3; ventaja/desventaja en F5.4).
 
     No se persiste tal cual; se vuelca a evento auditable y a la respuesta de la tool.
     """
 
     atacante_id: str
     objetivo_id: str
+    modo_tirada: str
+    tiradas_d20: list[int]
     tirada_d20: int
     modificador_ataque: int
+    modificador_situacional: int
     total_ataque: int
     ca_objetivo: int
     impacta: bool
@@ -155,6 +170,19 @@ class ResultadoAtaque:
     dano: int
     tipo_dano: str | None
     motivo: str | None
+    motivo_modificador: str | None
+
+
+_MODOS_TIRADA = ("normal", "ventaja", "desventaja")
+
+
+def _validar_modo_tirada(valor: Any) -> tuple[str | None, str | None]:
+    """None -> "normal". Valida contra D&D: ventaja/desventaja se cancelan fuera de esta tool."""
+    if valor is None:
+        return "normal", None
+    if not isinstance(valor, str) or valor not in _MODOS_TIRADA:
+        return None, f"'modo_tirada' debe ser uno de {_MODOS_TIRADA}"
+    return valor, None
 
 
 def _validar_modificador_ataque(valor: Any) -> tuple[int | None, str | None]:
@@ -163,10 +191,37 @@ def _validar_modificador_ataque(valor: Any) -> tuple[int | None, str | None]:
     return valor, None
 
 
-def _tirar_ataque_d20(mod: int, semilla: int | None) -> tuple[int, int]:
-    """1d20 + mod de ataque. Devuelve (tirada_natural, total)."""
-    r = tirar_dados(f"1d20{mod:+d}", semilla=semilla)
-    return r.dados[0], r.total
+def _validar_modificador_situacional(valor: Any) -> tuple[int | None, str | None]:
+    """None -> 0. Bonificador/penalizador narrativo simple, rango -10..10."""
+    if valor is None:
+        return 0, None
+    if isinstance(valor, bool) or not isinstance(valor, int):
+        return None, "'modificador_situacional' debe ser un entero"
+    if valor < -10 or valor > 10:
+        return None, "'modificador_situacional' debe estar entre -10 y 10"
+    return valor, None
+
+
+def _tirar_d20_bruto(semilla: int | None) -> int:
+    """1d20 puro, sin modificador (para ventaja/desventaja)."""
+    return tirar_dados("1d20", semilla=semilla).dados[0]
+
+
+def _tirar_tiradas_ataque(modo_tirada: str, semilla: int | None) -> list[int]:
+    """Tira 1d20 (normal) o 2d20 (ventaja/desventaja); no decide cuál se usa (D-COMBATE F5.4)."""
+    if modo_tirada == "normal":
+        return [_tirar_d20_bruto(semilla)]
+    primera = _tirar_d20_bruto(semilla)
+    segunda = _tirar_d20_bruto(None if semilla is None else semilla + 1)
+    return [primera, segunda]
+
+
+def _elegir_tirada(modo_tirada: str, tiradas: list[int]) -> int:
+    if modo_tirada == "ventaja":
+        return max(tiradas)
+    if modo_tirada == "desventaja":
+        return min(tiradas)
+    return tiradas[0]
 
 
 def _tirar_dano(expresion: str, semilla: int | None) -> int:
@@ -196,27 +251,32 @@ def _resolver_ataque(
     *,
     atacante_id: str,
     objetivo_id: str,
+    modo_tirada: str,
     modificador_ataque: int,
+    modificador_situacional: int,
     ca_objetivo: int,
     dano_expr: str,
     tipo_dano: str | None,
     motivo: str | None,
+    motivo_modificador: str | None,
     semilla: int | None,
 ) -> tuple[ResultadoAtaque | None, ResultadoHerramienta | None]:
-    """1d20 + modificador contra CA; natural 1 falla siempre, natural 20 impacta siempre.
+    """1d20 (o 2d20 con ventaja/desventaja) + modificadores contra CA.
 
-    Si impacta, tira daño (duplicando dados en crítico) vía el motor de dados existente.
-    Comparte esta lógica `combate.atacar_enemigo` y `combate.atacar_personaje`.
+    Natural 1 (sobre la tirada elegida) falla siempre; natural 20 impacta siempre y duplica
+    dados de daño. Comparte esta lógica `combate.atacar_enemigo` y `combate.atacar_personaje`.
     """
-    tirada_natural, total_ataque = _tirar_ataque_d20(modificador_ataque, semilla)
-    pifia = tirada_natural == 1
-    critico = tirada_natural == 20
+    tiradas_d20 = _tirar_tiradas_ataque(modo_tirada, semilla)
+    tirada_elegida = _elegir_tirada(modo_tirada, tiradas_d20)
+    pifia = tirada_elegida == 1
+    critico = tirada_elegida == 20
+    total_ataque = tirada_elegida + modificador_ataque + modificador_situacional
     impacta = critico or (not pifia and total_ataque >= ca_objetivo)
 
     dano_total = 0
     if impacta:
         expr_dano = _duplicar_dados_critico(dano_expr) if critico else dano_expr
-        semilla_dano = None if semilla is None else semilla + 1
+        semilla_dano = None if semilla is None else semilla + 2
         try:
             dano_total = _tirar_dano(expr_dano, semilla_dano)
         except ValueError as e:
@@ -225,8 +285,11 @@ def _resolver_ataque(
     resultado = ResultadoAtaque(
         atacante_id=atacante_id,
         objetivo_id=objetivo_id,
-        tirada_d20=tirada_natural,
+        modo_tirada=modo_tirada,
+        tiradas_d20=tiradas_d20,
+        tirada_d20=tirada_elegida,
         modificador_ataque=modificador_ataque,
+        modificador_situacional=modificador_situacional,
         total_ataque=total_ataque,
         ca_objetivo=ca_objetivo,
         impacta=impacta,
@@ -235,6 +298,7 @@ def _resolver_ataque(
         dano=dano_total,
         tipo_dano=tipo_dano,
         motivo=motivo,
+        motivo_modificador=motivo_modificador,
     )
     return resultado, None
 
@@ -838,8 +902,9 @@ class _ToolAvanzarTurno(_ToolCombateBase):
 class _ToolAtacarEnemigo(_ToolCombateBase):
     nombre = "combate.atacar_enemigo"
     descripcion = (
-        "Resuelve un ataque contra un enemigo: 1d20 + modificador_ataque contra su CA. "
-        "Natural 1 falla siempre (pifia); natural 20 impacta siempre (crítico, daño duplicado). "
+        "Resuelve un ataque contra un enemigo: 1d20 (o 2d20 con ventaja/desventaja) + "
+        "modificador_ataque + modificador_situacional contra su CA. Natural 1 (sobre la tirada "
+        "elegida) falla siempre (pifia); natural 20 impacta siempre (crítico, daño duplicado). "
         "Si impacta, aplica daño al enemigo. No avanza turno: usa combate.avanzar_turno aparte."
     )
     modifica = ["combate", "eventos"]
@@ -854,6 +919,23 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
             "dano": {"type": "string", "description": "Expresión de dados, ej. '1d8+3'."},
             "tipo_dano": {"type": "string"},
             "motivo": {"type": "string"},
+            "modo_tirada": {
+                "type": "string",
+                "enum": list(_MODOS_TIRADA),
+                "default": "normal",
+                "description": "normal (1d20), ventaja o desventaja (2d20, mayor/menor).",
+            },
+            "modificador_situacional": {
+                "type": "integer",
+                "minimum": -10,
+                "maximum": 10,
+                "default": 0,
+                "description": "Bonificador/penalizador narrativo simple.",
+            },
+            "motivo_modificador": {
+                "type": "string",
+                "description": "Motivo narrativo del modo_tirada/modificador_situacional.",
+            },
             "semilla": {
                 "type": "integer",
                 "description": "Semilla opcional para tiradas reproducibles (tests/depuración).",
@@ -886,6 +968,18 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
             return ResultadoHerramienta(ok=False, errores=[error_mod])
         assert modificador is not None
 
+        modo_tirada, error_modo = _validar_modo_tirada(args.get("modo_tirada"))
+        if error_modo:
+            return ResultadoHerramienta(ok=False, errores=[error_modo])
+        assert modo_tirada is not None
+
+        mod_situacional, error_sit = _validar_modificador_situacional(
+            args.get("modificador_situacional")
+        )
+        if error_sit:
+            return ResultadoHerramienta(ok=False, errores=[error_sit])
+        assert mod_situacional is not None
+
         dano_expr = args.get("dano")
         if not isinstance(dano_expr, str) or not dano_expr.strip():
             return ResultadoHerramienta(
@@ -894,14 +988,18 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
 
         tipo_dano = args.get("tipo_dano")
         motivo = args.get("motivo")
+        motivo_modificador = args.get("motivo_modificador")
         resultado, error_dado = _resolver_ataque(
             atacante_id=atacante_id,
             objetivo_id=enemigo_id,
+            modo_tirada=modo_tirada,
             modificador_ataque=modificador,
+            modificador_situacional=mod_situacional,
             ca_objetivo=enemigo.ca,
             dano_expr=dano_expr,
             tipo_dano=tipo_dano,
             motivo=motivo,
+            motivo_modificador=motivo_modificador,
             semilla=args.get("semilla"),
         )
         if error_dado:
@@ -937,8 +1035,11 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
                     "combate_id": combate.id,
                     "atacante_id": atacante_id,
                     "objetivo_id": enemigo_id,
+                    "modo_tirada": resultado.modo_tirada,
+                    "tiradas_d20": resultado.tiradas_d20,
                     "tirada_d20": resultado.tirada_d20,
                     "modificador_ataque": modificador,
+                    "modificador_situacional": mod_situacional,
                     "total_ataque": resultado.total_ataque,
                     "ca_objetivo": enemigo.ca,
                     "impacta": resultado.impacta,
@@ -949,6 +1050,7 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
                     "hp_antes": hp_antes,
                     "hp_despues": hp_despues,
                     "motivo": motivo,
+                    "motivo_modificador": motivo_modificador,
                 },
             ),
         )
@@ -958,8 +1060,11 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
                 "combate_id": combate.id,
                 "atacante_id": atacante_id,
                 "enemigo_id": enemigo_id,
+                "modo_tirada": resultado.modo_tirada,
+                "tiradas_d20": resultado.tiradas_d20,
                 "tirada_d20": resultado.tirada_d20,
                 "modificador_ataque": modificador,
+                "modificador_situacional": mod_situacional,
                 "total_ataque": resultado.total_ataque,
                 "ca_objetivo": enemigo.ca,
                 "impacta": resultado.impacta,
@@ -970,6 +1075,7 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
                 "hp_antes": hp_antes,
                 "hp_despues": hp_despues,
                 "estado": nuevo_estado,
+                "motivo_modificador": motivo_modificador,
                 "combate": combate_actualizado.model_dump(mode="json"),
             },
         )
@@ -978,10 +1084,11 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
 class _ToolAtacarPersonaje(_ToolCombateBase):
     nombre = "combate.atacar_personaje"
     descripcion = (
-        "Resuelve un ataque de un enemigo contra el personaje jugador: 1d20 + "
-        "modificador_ataque contra ficha.ca. Natural 1 falla siempre (pifia); natural 20 "
-        "impacta siempre (crítico, daño duplicado). Si impacta, aplica daño directamente a la "
-        "Ficha (no llama a hp_xp.aplicar_daño, para no duplicar evento). No avanza turno."
+        "Resuelve un ataque de un enemigo contra el personaje jugador: 1d20 (o 2d20 con "
+        "ventaja/desventaja) + modificador_ataque + modificador_situacional contra ficha.ca. "
+        "Natural 1 (sobre la tirada elegida) falla siempre (pifia); natural 20 impacta siempre "
+        "(crítico, daño duplicado). Si impacta, aplica daño directamente a la Ficha (no llama a "
+        "hp_xp.aplicar_daño, para no duplicar evento). No avanza turno."
     )
     modifica = ["combate", "ficha", "eventos"]
     schema: dict[str, Any] = {
@@ -995,6 +1102,23 @@ class _ToolAtacarPersonaje(_ToolCombateBase):
             "dano": {"type": "string", "description": "Expresión de dados, ej. '1d6+2'."},
             "tipo_dano": {"type": "string"},
             "motivo": {"type": "string"},
+            "modo_tirada": {
+                "type": "string",
+                "enum": list(_MODOS_TIRADA),
+                "default": "normal",
+                "description": "normal (1d20), ventaja o desventaja (2d20, mayor/menor).",
+            },
+            "modificador_situacional": {
+                "type": "integer",
+                "minimum": -10,
+                "maximum": 10,
+                "default": 0,
+                "description": "Bonificador/penalizador narrativo simple.",
+            },
+            "motivo_modificador": {
+                "type": "string",
+                "description": "Motivo narrativo del modo_tirada/modificador_situacional.",
+            },
             "semilla": {
                 "type": "integer",
                 "description": "Semilla opcional para tiradas reproducibles (tests/depuración).",
@@ -1055,6 +1179,18 @@ class _ToolAtacarPersonaje(_ToolCombateBase):
             return ResultadoHerramienta(ok=False, errores=[error_mod])
         assert modificador is not None
 
+        modo_tirada, error_modo = _validar_modo_tirada(args.get("modo_tirada"))
+        if error_modo:
+            return ResultadoHerramienta(ok=False, errores=[error_modo])
+        assert modo_tirada is not None
+
+        mod_situacional, error_sit = _validar_modificador_situacional(
+            args.get("modificador_situacional")
+        )
+        if error_sit:
+            return ResultadoHerramienta(ok=False, errores=[error_sit])
+        assert mod_situacional is not None
+
         dano_expr = args.get("dano")
         if not isinstance(dano_expr, str) or not dano_expr.strip():
             return ResultadoHerramienta(
@@ -1063,14 +1199,18 @@ class _ToolAtacarPersonaje(_ToolCombateBase):
 
         tipo_dano = args.get("tipo_dano")
         motivo = args.get("motivo")
+        motivo_modificador = args.get("motivo_modificador")
         resultado, error_dado = _resolver_ataque(
             atacante_id=enemigo_id,
             objetivo_id=personaje_id,
+            modo_tirada=modo_tirada,
             modificador_ataque=modificador,
+            modificador_situacional=mod_situacional,
             ca_objetivo=ficha.ca,
             dano_expr=dano_expr,
             tipo_dano=tipo_dano,
             motivo=motivo,
+            motivo_modificador=motivo_modificador,
             semilla=args.get("semilla"),
         )
         if error_dado:
@@ -1097,8 +1237,11 @@ class _ToolAtacarPersonaje(_ToolCombateBase):
                     "combate_id": combate.id,
                     "atacante_id": enemigo_id,
                     "objetivo_id": personaje_id,
+                    "modo_tirada": resultado.modo_tirada,
+                    "tiradas_d20": resultado.tiradas_d20,
                     "tirada_d20": resultado.tirada_d20,
                     "modificador_ataque": modificador,
+                    "modificador_situacional": mod_situacional,
                     "total_ataque": resultado.total_ataque,
                     "ca_objetivo": ficha.ca,
                     "impacta": resultado.impacta,
@@ -1109,6 +1252,7 @@ class _ToolAtacarPersonaje(_ToolCombateBase):
                     "hp_antes": hp_antes,
                     "hp_despues": hp_despues,
                     "motivo": motivo,
+                    "motivo_modificador": motivo_modificador,
                 },
             ),
         )
@@ -1118,8 +1262,11 @@ class _ToolAtacarPersonaje(_ToolCombateBase):
                 "combate_id": combate.id,
                 "enemigo_id": enemigo_id,
                 "personaje_id": personaje_id,
+                "modo_tirada": resultado.modo_tirada,
+                "tiradas_d20": resultado.tiradas_d20,
                 "tirada_d20": resultado.tirada_d20,
                 "modificador_ataque": modificador,
+                "modificador_situacional": mod_situacional,
                 "total_ataque": resultado.total_ataque,
                 "ca_objetivo": ficha.ca,
                 "impacta": resultado.impacta,
@@ -1130,6 +1277,7 @@ class _ToolAtacarPersonaje(_ToolCombateBase):
                 "hp_antes": hp_antes,
                 "hp_despues": hp_despues,
                 "estado_vital": estado_vital(hp_despues, ficha.hp_max),
+                "motivo_modificador": motivo_modificador,
             },
         )
 

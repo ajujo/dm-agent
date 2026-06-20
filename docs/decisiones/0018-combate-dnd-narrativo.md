@@ -1,9 +1,10 @@
-# ADR-0018 — Combate D&D narrativo: iniciativa, turnos y ataques básicos sin grid
+# ADR-0018 — Combate D&D narrativo: iniciativa, turnos, ataques y ventaja/desventaja sin grid
 
-- **Estado:** Aceptada (F5.1.1 / F5.2 / F5.3, 2026-06-20)
+- **Estado:** Aceptada (F5.1.1 / F5.2 / F5.3 / F5.4, 2026-06-20)
 - **Implementación:** `combate.tirar_iniciativa`, `combate.turno_actual`,
   `combate.avanzar_turno` (F5.2); `combate.atacar_enemigo`,
-  `combate.atacar_personaje` (F5.3) — ver
+  `combate.atacar_personaje` (F5.3, ventaja/desventaja y modificador
+  situacional añadidos en F5.4) — ver
   [`../estado/combate.md`](../estado/combate.md) y
   [`../tools/combate.md`](../tools/combate.md). Complementa
   [ADR-0017](0017-dnd55-narrativo-solitario.md), que fija el principio general
@@ -119,6 +120,48 @@ explícita del DM (LLM), igual que en F5.2. Acoplar "atacar" con "avanzar
 turno" habría asumido una economía de acciones rígida (una acción = un
 ataque = fin de turno) que F5.3 deliberadamente no impone.
 
+## Ventaja/desventaja y modificadores narrativos simples (F5.4)
+
+Mecánica clásica de D&D, sin acumulación: `modo_tirada` (`normal`/`ventaja`/
+`desventaja`) decide si se tira 1d20 o 2d20 (quedándose con el mayor/menor);
+`modificador_situacional` (-10..10) suma o resta al total junto con
+`modificador_ataque`. Natural 1/20 se evalúa **sobre la tirada elegida**: en
+ventaja, `[1, 20]` es un crítico (se elige 20); en desventaja, `[1, 20]` es
+una pifia (se elige 1).
+
+### Cancelación es responsabilidad de quien llama, no de la tool
+
+D&D dice que ventaja y desventaja simultáneas se cancelan y se tira normal.
+F5.4 no implementa esa lógica de cancelación dentro de la tool: el campo
+`modo_tirada` acepta **un solo valor final**, así que si el DM detecta
+ventaja y desventaja a la vez, simplemente pasa `modo_tirada="normal"` él
+mismo. Decidimos no construir un sistema de acumulación de fuentes de
+ventaja/desventaja en esta fase — sería complejidad táctica (rastrear
+cuántas fuentes, de dónde, con qué prioridad) que no aporta nada al estilo
+narrativo sin grid y que F5.1.1 explícitamente quiere evitar.
+
+### Total real, no mockeado: rediseño del helper de tirada
+
+F5.3 tenía `_tirar_ataque_d20(mod, semilla) -> (natural, total)`, que
+calculaba el total internamente. Para soportar ventaja/desventaja (que
+necesita decidir *cuál* de dos tiradas se usa antes de poder calcular el
+total) se sustituyó por `_tirar_tiradas_ataque(modo_tirada, semilla) ->
+list[int]`, que solo tira dados brutos; el total
+(`tirada_elegida + modificador_ataque + modificador_situacional`) se calcula
+después, fuera del helper de dados. Esto rompe la compatibilidad de mocking
+de los tests de F5.3 (que mockeaban `_tirar_ataque_d20` con un total
+arbitrario); se actualizaron para mockear `_tirar_tiradas_ataque` con la(s)
+tirada(s) bruta(s) y dejar que el total salga del cálculo real.
+
+### `motivo_modificador` es narrativo, no mecánico
+
+El campo existe para que quede auditado *por qué* hubo ventaja/desventaja o
+modificador situacional ("la rata está distraída por el fuego"), no para
+codificar una regla. El DM (LLM) puede proponer ventaja/desventaja a partir
+de la escena, pero la decisión de si aplica de verdad la confirma el
+jugador antes de que la tool se llame con ese `modo_tirada` — mismo
+principio que D-COMBATE-04 para reacciones/ataques de oportunidad.
+
 ## Consecuencias
 
 - `EnemigoCombate` gana `mod_destreza` e `iniciativa` opcionales (default
@@ -131,12 +174,17 @@ ataque = fin de turno) que F5.3 deliberadamente no impone.
 - Las tiradas reutilizan el motor de dados existente
   (`dm_agent.herramientas.dados.tirar`); deterministas con `semilla` para
   tests, aleatorias de verdad en runtime sin ella.
-- `ResultadoAtaque` (F5.3) es un `dataclass` interno de
-  `herramientas/combate.py`, no un campo persistido de `CombateNarrativo`:
-  se vuelca a evento auditable y a la respuesta de la tool, no se guarda un
-  historial de ataques.
+- `ResultadoAtaque` (F5.3, ampliado en F5.4 con `modo_tirada`/`tiradas_d20`/
+  `modificador_situacional`/`motivo_modificador`) es un `dataclass` interno
+  de `herramientas/combate.py`, no un campo persistido de
+  `CombateNarrativo`: se vuelca a evento auditable y a la respuesta de la
+  tool, no se guarda un historial de ataques.
 - `combate.*` sigue siendo la API canónica: no se introduce `conflicto.*` ni
   ningún otro vocabulario alternativo.
+- Sin los campos nuevos de F5.4 (`modo_tirada`, `modificador_situacional`,
+  `motivo_modificador`), el comportamiento de `combate.atacar_enemigo`/
+  `combate.atacar_personaje` es idéntico a F5.3 — los tres tienen default
+  (`"normal"`, `0`, `null`) que reproducen exactamente la mecánica anterior.
 
 ## No implementado a propósito
 
@@ -149,6 +197,13 @@ vectorial ni streaming.
 completas, ataques de oportunidad mecánicos, flanqueo mecánico,
 ventaja/desventaja, cobertura mecánica, hechizos, áreas de efecto,
 resistencias/vulnerabilidades, salvaciones, XP automática, grid/casillas,
+RAG, memoria vectorial ni streaming.
+
+**F5.4:** flanqueo mecánico automático, ataques de oportunidad mecánicos,
+cobertura mecánica, condiciones completas, hechizos, áreas de efecto,
+salvaciones, IA enemiga, acciones/reacciones completas, acumulación
+compleja de múltiples ventajas/desventajas, XP automática, grid/casillas,
 RAG, memoria vectorial ni streaming. Solo queda la arquitectura y la
-documentación preparadas para fases futuras (F5.4: ventaja/desventaja y
-críticos más ricos).
+documentación preparadas para fases futuras (F5.5: acciones del turno y
+propuesta de reacción, manteniendo siempre "el agente propone, el jugador
+confirma").

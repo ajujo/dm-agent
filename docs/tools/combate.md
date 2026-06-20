@@ -1,6 +1,6 @@
-# Tools `combate.*` (F5.1, distancias en F5.1.1, iniciativa/turnos en F5.2, ataques contra CA en F5.3)
+# Tools `combate.*` (F5.1, distancias en F5.1.1, iniciativa/turnos en F5.2, ataques en F5.3, ventaja/desventaja en F5.4)
 
-> Módulo: `dm_agent.herramientas.combate` · Fase: F5.1 / F5.1.1 / F5.2 / F5.3
+> Módulo: `dm_agent.herramientas.combate` · Fase: F5.1 / F5.1.1 / F5.2 / F5.3 / F5.4
 
 ## Propósito
 
@@ -208,27 +208,40 @@ Devuelve `combate_id`, `turno_actual` (nueva entrada), `indice_turno_actual`,
   "modificador_ataque": 5,
   "dano": "1d8+3",
   "tipo_dano": "cortante",
-  "motivo": "Tyr ataca con su espada larga"
+  "motivo": "Tyr ataca con su espada larga",
+  "modo_tirada": "ventaja",
+  "modificador_situacional": 2,
+  "motivo_modificador": "La rata está distraída por el fuego"
 }
 ```
 
 Requeridos: `campaña_id`, `combate_id`, `atacante_id`, `enemigo_id`,
 `modificador_ataque` (entero), `dano` (expresión de dados, ej. `"1d8+3"`).
-Tira `1d20 + modificador_ataque` contra `enemigo.ca`:
+Opcionales (F5.4): `modo_tirada` (`"normal"` por defecto, o `"ventaja"`/
+`"desventaja"`), `modificador_situacional` (entero -10..10, default `0`),
+`motivo_modificador` (texto libre, default `null`). Sin estos tres campos,
+el comportamiento es idéntico a F5.3.
 
 ```text
-natural 1                          -> falla siempre (pifia=true)
-natural 20                         -> impacta siempre (critico=true, daño x2 en dados)
-total_ataque >= ca_objetivo         -> impacta
-total_ataque < ca_objetivo          -> falla
+normal:      1d20
+ventaja:     2d20, se elige el mayor
+desventaja:  2d20, se elige el menor
+
+natural 1 (sobre la tirada elegida)   -> falla siempre (pifia=true)
+natural 20 (sobre la tirada elegida)  -> impacta siempre (critico=true, daño x2 en dados)
+total_ataque = tirada_d20 + modificador_ataque + modificador_situacional
+total_ataque >= ca_objetivo           -> impacta
+total_ataque < ca_objetivo            -> falla
 ```
 
 Si impacta, aplica daño al enemigo con el mismo umbral de estado que
 `combate_dano_enemigo`. Si falla, no modifica el HP. **No avanza turno**:
 usa `combate_avanzar_turno` aparte. Opcional `semilla` para tiradas
-reproducibles. Devuelve `tirada_d20`, `modificador_ataque`, `total_ataque`,
-`ca_objetivo`, `impacta`, `critico`, `pifia`, `dano`, `tipo_dano`,
-`hp_antes`, `hp_despues`, `estado` y el `combate` completo actualizado.
+reproducibles. Devuelve `modo_tirada`, `tiradas_d20` (lista, 1 o 2
+elementos), `tirada_d20` (elegida), `modificador_ataque`,
+`modificador_situacional`, `total_ataque`, `ca_objetivo`, `impacta`,
+`critico`, `pifia`, `dano`, `tipo_dano`, `hp_antes`, `hp_despues`, `estado`,
+`motivo_modificador` y el `combate` completo actualizado.
 
 ## `combate_atacar_personaje`
 
@@ -241,20 +254,26 @@ reproducibles. Devuelve `tirada_d20`, `modificador_ataque`, `total_ataque`,
   "modificador_ataque": 4,
   "dano": "1d6+2",
   "tipo_dano": "perforante",
-  "motivo": "La rata muerde a Tyr"
+  "motivo": "La rata muerde a Tyr",
+  "modo_tirada": "desventaja",
+  "modificador_situacional": -2,
+  "motivo_modificador": "Tyr está derribado"
 }
 ```
 
 Requeridos: `campaña_id`, `combate_id`, `enemigo_id`, `personaje_id`
 (debe coincidir con el `personaje_id` del combate), `modificador_ataque`,
-`dano`. Carga la `Ficha` vía `GestorEstado` y usa `ficha.ca` como objetivo;
-misma lógica de natural 1/20 que `combate_atacar_enemigo`. Si impacta,
+`dano`. Mismos opcionales y misma mecánica de ventaja/desventaja/
+modificador situacional que `combate_atacar_enemigo` (ver arriba). Carga la
+`Ficha` vía `GestorEstado` y usa `ficha.ca` como objetivo. Si impacta,
 aplica el daño **directamente sobre la `Ficha`** (no llama a
 `hp_xp.aplicar_daño`, para no registrar dos eventos de daño por el mismo
 ataque — ver [ADR-0018](../decisiones/0018-combate-dnd-narrativo.md)). Si
-falla, no modifica la ficha. **No avanza turno**. Devuelve `tirada_d20`,
-`modificador_ataque`, `total_ataque`, `ca_objetivo`, `impacta`, `critico`,
-`pifia`, `dano`, `tipo_dano`, `hp_antes`, `hp_despues` y `estado_vital`.
+falla, no modifica la ficha. **No avanza turno**. Devuelve `modo_tirada`,
+`tiradas_d20`, `tirada_d20`, `modificador_ataque`,
+`modificador_situacional`, `total_ataque`, `ca_objetivo`, `impacta`,
+`critico`, `pifia`, `dano`, `tipo_dano`, `hp_antes`, `hp_despues`,
+`estado_vital` y `motivo_modificador`.
 
 ## Eventos auditables
 
@@ -269,7 +288,7 @@ Cada mutación registra un `Evento` (F3.1) en `eventos.jsonl` vía
 | `combate_terminado` | `campaña_id`, `combate_id`, `resultado`, `motivo` |
 | `iniciativa_tirada` | `campaña_id`, `combate_id`, `orden_iniciativa`, `ronda` |
 | `turno_avanzado` | `campaña_id`, `combate_id`, `turno_anterior`, `turno_actual`, `ronda`, `motivo` |
-| `ataque_enemigo_resuelto` | `campaña_id`, `combate_id`, `atacante_id`, `objetivo_id`, `tirada_d20`, `modificador_ataque`, `total_ataque`, `ca_objetivo`, `impacta`, `critico`, `pifia`, `dano`, `tipo_dano`, `hp_antes`, `hp_despues`, `motivo` |
+| `ataque_enemigo_resuelto` | `campaña_id`, `combate_id`, `atacante_id`, `objetivo_id`, `modo_tirada`, `tiradas_d20`, `tirada_d20`, `modificador_ataque`, `modificador_situacional`, `total_ataque`, `ca_objetivo`, `impacta`, `critico`, `pifia`, `dano`, `tipo_dano`, `hp_antes`, `hp_despues`, `motivo`, `motivo_modificador` |
 | `ataque_personaje_resuelto` | (mismos campos que arriba; `atacante_id` es el `enemigo_id`, `objetivo_id` es el `personaje_id`) |
 
 `combate_estado`, `combate_turno_actual` no registran evento (son de solo
@@ -282,12 +301,13 @@ lectura). `combate_atacar_personaje` registra **solo**
 
 `campaña_id`/`personaje_id`/`combate_id`/`enemigo_id`/`atacante_id` vacíos o
 faltantes, combate inexistente, enemigo inexistente en el combate, id de
-enemigo duplicado, `cantidad`/`mod_destreza`/`modificador_ataque` inválidos,
-`dano` con expresión de dados inválida, `personaje.id`/`personaje_id` que no
-coincide con el del combate, ficha inexistente, combate activo ya en curso
-al iniciar uno nuevo, o iniciativa no tirada todavía al consultar/avanzar
-turno → `ResultadoHerramienta(ok=False, errores=[...])`. Sin tracebacks al
-LLM.
+enemigo duplicado, `cantidad`/`mod_destreza`/`modificador_ataque`/
+`modificador_situacional` inválidos o fuera de rango, `modo_tirada` que no
+es `normal`/`ventaja`/`desventaja`, `dano` con expresión de dados inválida,
+`personaje.id`/`personaje_id` que no coincide con el del combate, ficha
+inexistente, combate activo ya en curso al iniciar uno nuevo, o iniciativa
+no tirada todavía al consultar/avanzar turno →
+`ResultadoHerramienta(ok=False, errores=[...])`. Sin tracebacks al LLM.
 
 ## Distancias (`EnemigoCombate.distancia`)
 
@@ -306,12 +326,24 @@ aplicará automáticamente.
 ## Distancia y alcance en ataques (F5.3)
 
 La `distancia` del enemigo (ver más abajo) **no bloquea** ni valida
-`combate_atacar_enemigo`/`combate_atacar_personaje` en F5.3: es información
+`combate_atacar_enemigo`/`combate_atacar_personaje`: es información
 narrativa para que el DM decida si el ataque tiene sentido (una espada pide
 normalmente `cuerpo_a_cuerpo`; un arco puede funcionar a `media`/`larga`).
 Validación dura de alcance queda para fases futuras.
 
-## Limitaciones (F5.1 / F5.1.1 / F5.2 / F5.3)
+## Ventaja/desventaja y modificador situacional (F5.4)
+
+Ver [`../estado/combate.md`](../estado/combate.md#ventajadesventaja-y-modificadores-situacionales-f54)
+para la mecánica completa. Resumen: el DM puede **proponer** ventaja,
+desventaja o un modificador situacional a partir de la ficción (p. ej. "la
+rata está distraída", "Tyr ataca desde altura"), pero **el jugador confirma
+si aplica** antes de pasarlo a la tool — coherente con D-COMBATE-04. Si
+ventaja y desventaja coinciden en la misma situación, se cancelan
+conceptualmente y se pasa `modo_tirada="normal"`; la tool no acumula ni
+resuelve eso por sí sola. `motivo_modificador` debe explicar el porqué
+narrativo, no un cálculo de reglas.
+
+## Limitaciones (F5.1 / F5.1.1 / F5.2 / F5.3 / F5.4)
 
 - Sin grid/casillas, pies/pulgadas exactos ni economía de acciones completa;
   `distancia` no bloquea ataques por alcance.
@@ -319,12 +351,15 @@ Validación dura de alcance queda para fases futuras.
   manualmente cuándo y a quién ataca cada enemigo.
 - Sin reacciones ni ataques de oportunidad **mecánicos** (solo propuesta +
   confirmación del jugador, en fases futuras).
-- Sin flanqueo ni cobertura mecánicos, sin áreas de efecto medidas, sin
-  ventaja/desventaja. Las reglas tácticas se reinterpretan de forma
-  narrativa (ver
+- Sin flanqueo ni cobertura **automáticos**: si conceden ventaja/desventaja,
+  el DM los detecta en la ficción y los pasa explícitamente vía
+  `modo_tirada`; no hay cálculo geométrico (ver
   [`../estado/combate.md`](../estado/combate.md#reglas-tácticas-adaptables-no-eliminadas-reinterpretadas)).
-- Sin sorpresa, salvaciones de muerte, resistencias/vulnerabilidades ni
-  hechizos.
+- Sin acumulación compleja de ventaja/desventaja (varias fuentes
+  simultáneas) ni prioridades entre modificadores: un `modo_tirada` final y
+  un `modificador_situacional` por ataque.
+- Sin sorpresa, salvaciones de muerte, condiciones completas,
+  resistencias/vulnerabilidades, áreas de efecto ni hechizos.
 - Sin XP automática, balance automático ni bestiario completo.
 - Sin inyección de combate al contexto narrativo (ver
   [`../estado/combate.md`](../estado/combate.md#memoria-narrativa)).

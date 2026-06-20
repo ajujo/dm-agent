@@ -249,7 +249,7 @@ def test_dispatch_api_atacar_enemigo(entorno, monkeypatch):
     res1 = _iniciar(reg)
     combate_id = res1.datos["combate"]["id"]
     monkeypatch.setattr(
-        "dm_agent.herramientas.combate._tirar_ataque_d20", lambda mod, semilla: (15, 15 + mod)
+        "dm_agent.herramientas.combate._tirar_tiradas_ataque", lambda modo, semilla: [15]
     )
     monkeypatch.setattr("dm_agent.herramientas.combate._tirar_dano", lambda expr, semilla: 4)
     res = reg.dispatch_api(
@@ -287,7 +287,7 @@ def test_dispatch_api_atacar_personaje(entorno, monkeypatch):
     res1 = _iniciar(reg)
     combate_id = res1.datos["combate"]["id"]
     monkeypatch.setattr(
-        "dm_agent.herramientas.combate._tirar_ataque_d20", lambda mod, semilla: (15, 15 + mod)
+        "dm_agent.herramientas.combate._tirar_tiradas_ataque", lambda modo, semilla: [15]
     )
     monkeypatch.setattr("dm_agent.herramientas.combate._tirar_dano", lambda expr, semilla: 4)
     res = reg.dispatch_api(

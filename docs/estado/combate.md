@@ -1,4 +1,4 @@
-# Combate narrativo mínimo (F5.1, distancias en F5.1.1, iniciativa/turnos en F5.2, ataques contra CA en F5.3)
+# Combate narrativo mínimo (F5.1, distancias en F5.1.1, iniciativa/turnos en F5.2, ataques en F5.3, ventaja/desventaja en F5.4)
 
 > Módulos: `dm_agent.esquemas.combate` (`EnemigoCombate`, `EntradaIniciativa`,
 > `CombateNarrativo`) · `dm_agent.estado.combate` (`GestorCombateNarrativo`) ·
@@ -127,6 +127,52 @@ narrativa para que el DM decida si el ataque tiene sentido en la ficción
 funcionar a `media`/`larga`). Validar el alcance de forma dura queda para
 fases futuras, si llega a hacer falta.
 
+## Ventaja/desventaja y modificadores situacionales (F5.4)
+
+`combate.atacar_enemigo` y `combate.atacar_personaje` aceptan tres campos
+opcionales nuevos:
+
+| Campo | Default | Descripción |
+|---|---|---|
+| `modo_tirada` | `"normal"` | `normal` / `ventaja` / `desventaja`. |
+| `modificador_situacional` | `0` | Entero -10..10, bonificador/penalizador narrativo. |
+| `motivo_modificador` | `null` | Texto libre: por qué se aplica el modo/modificador. |
+
+Sin pasar estos campos, el comportamiento es **idéntico a F5.3**.
+
+Mecánica clásica de D&D:
+
+```text
+normal:      tirar 1d20
+ventaja:     tirar 2d20, quedarse con el mayor
+desventaja:  tirar 2d20, quedarse con el menor
+```
+
+`total_ataque = tirada_d20 (elegida) + modificador_ataque + modificador_situacional`.
+Natural 1/20 se evalúa **sobre la tirada elegida** tras ventaja/desventaja:
+una ventaja que saca `[1, 20]` es un crítico (se elige 20); una desventaja
+que saca `[1, 20]` es una pifia (se elige 1).
+
+**Cancelación conceptual**: si la ficción tiene ventaja y desventaja a la
+vez, se cancelan y se tira normal — pero esa cancelación la decide quien
+llama a la tool (el DM/LLM) eligiendo `modo_tirada="normal"`; la tool en sí
+solo acepta **un modo final**, no acumula ni resuelve combinaciones de
+múltiples ventajas/desventajas.
+
+`motivo_modificador` debe ser **narrativo**: por qué existe la ventaja,
+desventaja o modificador situacional en la ficción (p. ej. "la rata está
+distraída por el fuego", "Tyr ataca desde terreno elevado"), no un cálculo
+de reglas. El DM (LLM) puede **proponer** ventaja/desventaja a partir de la
+escena, pero quien confirma si aplica de verdad es el jugador — coherente
+con D-COMBATE-04 (propuesta, no automatismo).
+
+No hay todavía **acumulación compleja** (varias fuentes de ventaja, varios
+modificadores situacionales con prioridades distintas, etc.): solo un modo
+final y un modificador situacional por ataque. Flanqueo, cobertura y
+condiciones siguen **sin calcularse automáticamente** — si conceden
+ventaja/desventaja, es el DM quien lo decide y lo pasa explícitamente en
+`modo_tirada`/`modificador_situacional`.
+
 ## Esquemas
 
 ### `EnemigoCombate`
@@ -179,18 +225,21 @@ todavía no se ha tirado. El campo `turno` (F5.1, contador simple) sigue
 existiendo pero no se usa para nada en F5.2: `ronda` e `indice_turno_actual`
 son los campos vivos del ciclo de iniciativa.
 
-### `ResultadoAtaque` (F5.3, no persistido)
+### `ResultadoAtaque` (F5.3, ampliado en F5.4, no persistido)
 
 ```text
-atacante_id, objetivo_id, tirada_d20, modificador_ataque, total_ataque,
-ca_objetivo, impacta, critico, pifia, dano, tipo_dano, motivo
+atacante_id, objetivo_id, modo_tirada, tiradas_d20, tirada_d20,
+modificador_ataque, modificador_situacional, total_ataque, ca_objetivo,
+impacta, critico, pifia, dano, tipo_dano, motivo, motivo_modificador
 ```
 
-Vive solo en `dm_agent.herramientas.combate` (como `dataclass`, igual que
-`ResultadoTirada` en `herramientas/dados.py`): no es un campo de
-`CombateNarrativo`. El resultado de un ataque se vuelca al evento auditable
-y a la respuesta de la tool; no hace falta guardar un historial de ataques
-dentro del combate para que F5.3 cumpla su objetivo.
+`tiradas_d20` es la lista de tiradas brutas (1 elemento en modo `normal`, 2
+en `ventaja`/`desventaja`); `tirada_d20` es la elegida tras aplicar
+ventaja/desventaja. Vive solo en `dm_agent.herramientas.combate` (como
+`dataclass`, igual que `ResultadoTirada` en `herramientas/dados.py`): no es
+un campo de `CombateNarrativo`. El resultado de un ataque se vuelca al
+evento auditable y a la respuesta de la tool; no hace falta guardar un
+historial de ataques dentro del combate.
 
 ## Persistencia
 
@@ -258,8 +307,12 @@ de consecuencia al terminar).
 - **F5.3 — Ataques básicos contra CA**: `combate.atacar_enemigo` y
   `combate.atacar_personaje` (1d20 + modificador contra CA; natural 1/20;
   daño duplicado en crítico).
+- **F5.4 — Ventaja/desventaja y modificadores situacionales**: `modo_tirada`
+  (normal/ventaja/desventaja) y `modificador_situacional` en las mismas dos
+  tools, con `motivo_modificador` narrativo.
 - Eventos auditables `iniciativa_tirada`, `turno_avanzado`,
-  `ataque_enemigo_resuelto`, `ataque_personaje_resuelto`.
+  `ataque_enemigo_resuelto`, `ataque_personaje_resuelto` (estos dos últimos
+  incluyen `modo_tirada`/`tiradas_d20`/`modificador_situacional` desde F5.4).
 
 ## Pendiente (fases futuras)
 
@@ -270,19 +323,22 @@ ADR-0018):
   proponer una reacción o un ataque de oportunidad narrativo cuando la
   ficción lo justifique, pero **el jugador debe confirmarlos antes de
   aplicarlos** — no se aplican automáticamente.
-- **Flanqueo narrativo**: ver ejemplo en
-  [ADR-0018](../decisiones/0018-combate-dnd-narrativo.md).
-- **Ventaja/desventaja narrativa**: ver F5.4 propuesta — aplicada cuando la
-  ficción lo justifique, sin tabla de modificadores tácticos.
+- **Flanqueo y cobertura mecánicos/automáticos**: hoy solo conceden
+  ventaja/desventaja si el DM los detecta en la ficción y los pasa
+  explícitamente vía `modo_tirada`; no hay cálculo automático a partir de
+  posición o distancia.
+- **Acumulación compleja de ventaja/desventaja**: varias fuentes
+  simultáneas, prioridades entre modificadores situacionales, etc. — F5.4
+  solo acepta un modo final y un modificador por ataque.
 - **IA enemiga / selección automática de acciones**: el DM (LLM) sigue
   decidiendo manualmente cuándo y a quién ataca cada enemigo.
-- **Validación dura de alcance por `distancia`**: en F5.3 la distancia es
+- **Validación dura de alcance por `distancia`**: la distancia sigue siendo
   solo informativa, no bloquea ataques.
 - **Sorpresa**: no implementada.
 - Integración con memoria narrativa al terminar combate (sugerir/registrar
   consecuencia).
 
-## Limitaciones (F5.1 / F5.1.1 / F5.2 / F5.3)
+## Limitaciones (F5.1 / F5.1.1 / F5.2 / F5.3 / F5.4)
 
 - Sin grid, casillas, pies/pulgadas ni reglas de movimiento; `distancia` no
   bloquea ataques por alcance.
@@ -290,13 +346,16 @@ ADR-0018):
   acciones completa.
 - Sin reacciones ni ataques de oportunidad **mecánicos** (solo se proponen
   narrativamente y requieren confirmación del jugador en fases futuras).
-- Sin flanqueo ni cobertura mecánicos, sin áreas de efecto, sin
-  ventaja/desventaja.
-- Sin sorpresa, salvaciones de muerte, resistencias, vulnerabilidades ni
-  hechizos.
+- Sin flanqueo ni cobertura **automáticos**: conceden ventaja/desventaja
+  solo si el DM los detecta y los indica explícitamente.
+- Sin acumulación de múltiples ventajas/desventajas ni prioridades entre
+  modificadores: un `modo_tirada` final y un `modificador_situacional` por
+  ataque.
+- Sin condiciones completas, áreas de efecto, salvaciones, sin sorpresa,
+  resistencias, vulnerabilidades ni hechizos.
 - Sin XP automática, balance automático ni bestiario completo.
 - Sin RAG, memoria vectorial ni streaming.
 - D17 (D&D 5.5 narrativo en solitario) guiará cualquier adaptación de reglas
   futura; este módulo no implementa reglas adaptadas automáticas más allá de
-  la iniciativa, los turnos y los ataques básicos, solo el estado mínimo
-  para sostener el resto a mano.
+  la iniciativa, los turnos, los ataques básicos y la ventaja/desventaja,
+  solo el estado mínimo para sostener el resto a mano.
