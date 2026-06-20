@@ -296,11 +296,32 @@ La prueba se considera válida si, contra un endpoint real:
 13. Al continuar (`dm-agent --continuar`), el agente recuerda el resumen y el
     estado de la campaña (memoria narrativa inyectada como `system` antes del
     mensaje de usuario).
+14. **El agente no debe escribir bloques JSON simulando llamadas de
+    herramientas** (texto tipo `[{"name": "...", "arguments": {...}}]`); si
+    necesita una tool, debe llamarla de verdad (F6.1, ver sección 8 más abajo,
+    "Si el modelo escribe JSON de tools en vez de llamar tools").
 
 ---
 
 ## 8. Resolución de problemas
 
+- **Si el modelo escribe JSON de tools en vez de llamar tools** (responde con
+  un bloque de texto tipo `[{"name": "ficha_leer", "arguments": {...}}]` en
+  vez de hacer una llamada real): esto es un **fallo de disciplina de
+  tool-use**. No significa que la tool haya corrido. En `--debug`, una tool
+  real **siempre** aparece como `[debug] tool <nombre>(<args>) -> ok=...`; si
+  solo ves narración/JSON en el texto de la respuesta y no esa línea, ninguna
+  tool se ejecutó. Desde F6.1, el agente detecta este patrón
+  (`_contiene_tool_call_simulada`) y:
+  - en `--debug`, imprime
+    `[debug] posible tool call simulada en texto; no se ha ejecutado ninguna herramienta`;
+  - reintenta automáticamente **una sola vez** por turno con un mensaje
+    correctivo ("Has escrito una llamada a herramienta como texto...").
+  Si tras el reintento el modelo **sigue** escribiendo JSON de tools, no es
+  un bug de `dm-agent`: es el modelo ignorando la instrucción del system
+  prompt. Prueba con un modelo con mejor seguimiento de instrucciones/tool-
+  calling (ver `docs/MODELOS_LOCALES.md`), o pide explícitamente "llama a la
+  tool real, no escribas el JSON".
 - **El modelo no llama tools** (solo narra): falta
   `--enable-auto-tool-choice`/`--tool-call-parser` en el servidor, o el
   modelo es demasiado pequeño para tool-calling fiable. Usa un modelo más

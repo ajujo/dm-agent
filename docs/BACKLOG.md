@@ -171,6 +171,19 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 
 ---
 
+## F6.1 — Disciplina de uso de tools y refuerzo del prompt
+
+> No es parte de "F6 — Creación de mundo" (más abajo): es una corrección de
+> robustez descubierta en la prueba manual de F5.6 contra un endpoint real.
+
+### #F6.1-01 — Prohibir tool calls simuladas en texto + reintento — ✅ HECHO (F6.1)
+- **Estado.** Durante la prueba manual real (vLLM, perfil `rapido`), el modelo respondió con bloques `[{"name": "ficha_leer", "arguments": {...}}]` en vez de llamar la tool real, incluso tras pedírselo explícitamente. Corregido en dos frentes: `src/dm_agent/prompts/system_dm_minimo.md` (nueva "REGLA ABSOLUTA SOBRE HERRAMIENTAS", "ESTADO MECÁNICO" con lista cerrada de qué requiere tool real, regla de campaña/personaje por defecto, regla de no duplicar combates; también se corrigió el texto obsoleto de F2.2 que decía "no hay ficha/combate/inventario" — ya existen) y `src/dm_agent/nucleo/agente.py` (`_contiene_tool_call_simulada` detecta el patrón `"name"`+`"arguments"` en texto sin parsearlo ni ejecutarlo; `AgenteDM.responder` reintenta una sola vez por turno con mensaje correctivo). Tests: `tests/test_tool_discipline.py`.
+- **Decisión técnica.** Se prefirió Opción 2 (reintento automático, limitado a una vez por turno) sobre solo advertencia de debug, porque es sencilla y testeable sin red. El detector deliberadamente no parsea ni ejecuta el JSON simulado (sería peligroso: ejecutar argumentos arbitrarios escritos como texto narrativo). El mensaje correctivo se envía como turno `user` sintético, sin persistirse en `Sesion` (igual que el round-trip de tool_calls reales, que tampoco se persiste entre turnos).
+- **Pendiente:** si el modelo ignora el reintento y sigue escribiendo JSON simulado, no hay corrección adicional — es un límite de qué tan bien el modelo sigue instrucciones, no algo que el cliente pueda forzar. No se intentó normalizar/parsear el JSON simulado como fallback de ejecución (riesgo de seguridad, descartado explícitamente).
+- **P.** P0 (bloqueaba el uso real del agente en pruebas manuales).
+
+---
+
 ## F6 — Creación de mundo / campaña / aventura
 
 ### #F6-01 — Migrar `config/tonos/` desde dnd5e

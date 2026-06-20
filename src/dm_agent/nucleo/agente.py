@@ -1,28 +1,54 @@
-"""Agent loop mínimo del Director de Juego (F2.2).
+"""Agent loop mínimo del Director de Juego (F2.2; disciplina de tools en F6.1).
 
 Flujo de un turno:
 
     usuario → registra en sesión → construye messages (system + historial)
-    → ClienteLLM.chat(tools=[dados_tirar])
-      - si hay content normal: lo devuelve y lo persiste
+    → ClienteLLM.chat(tools=[...])
       - si hay tool_calls: ejecuta cada una con RegistroHerramientas.dispatch_api,
         persiste call+result, reinyecta resultados y vuelve a llamar al LLM
+      - si hay content normal sin tool_calls: si "parece" una tool call simulada
+        en texto (F6.1), se reintenta una vez con un mensaje correctivo; si no,
+        se devuelve y se persiste
     → protegido por max_iter_turno para no bucle-infinito
 
-Alcance F2.2: NO hay estado mecánico (ficha, combate, inventario, mundo). La
-única tool ejecutable es `dados.tirar` (nombre API `dados_tirar`). Una tool
-desconocida produce un resultado de error controlado que se reinyecta al modelo.
+F6.1: algunos modelos, en vez de llamar a una tool real, escriben en el texto
+un bloque tipo `[{"name": "ficha_leer", "arguments": {...}}]` que parece una
+tool call pero no ejecuta nada. `_contiene_tool_call_simulada` detecta ese
+patrón (sin intentar parsearlo ni ejecutarlo: sería peligroso) y dispara como
+máximo un reintento corrector por turno.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from dm_agent.herramientas.registro import HerramientaNoRegistrada, RegistroHerramientas
 from dm_agent.llm.cliente import ClienteLLM, ToolCall
 from dm_agent.memoria.contexto import ConstructorContextoMemoria
 from dm_agent.persistencia.sesion import Sesion
+
+_PATRON_TOOL_CALL_SIMULADA = re.compile(
+    r'"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:'
+    r'|"arguments"\s*:\s*\{.*?\}\s*,\s*"name"\s*:\s*"[^"]+"',
+    re.DOTALL,
+)
+
+_MENSAJE_CORRECTIVO_TOOL_SIMULADA = (
+    "Has escrito una llamada a herramienta como texto. Eso está prohibido. Si necesitas "
+    "usar una herramienta, llama a la tool real a través del sistema de tools. Reintenta ahora."
+)
+
+
+def _contiene_tool_call_simulada(texto: str) -> bool:
+    """Detecta un bloque tipo {"name": ..., "arguments": ...} escrito como texto.
+
+    Deliberadamente no intenta parsear ni ejecutar ese JSON: solo lo detecta
+    para poder avisar/reintentar. Un JSON narrativo normal (sin las claves
+    "name"+"arguments" juntas) no debe disparar esto.
+    """
+    return bool(_PATRON_TOOL_CALL_SIMULADA.search(texto))
 
 
 class AgenteDM:
@@ -102,12 +128,26 @@ class AgenteDM:
         self.sesion.registrar_usuario(entrada_usuario)
         messages = self._messages_base()
         tools = self.registro.esquemas_disponibles(ctx=None) or None
+        reintento_simulada_usado = False
 
         for _ in range(self.max_iter_turno):
             resp = self.cliente.chat(messages, tools=tools)
 
             if not resp.tiene_tool_calls:
                 content = resp.content or ""
+                if _contiene_tool_call_simulada(content):
+                    if self.debug:
+                        print(
+                            "[debug] posible tool call simulada en texto; "
+                            "no se ha ejecutado ninguna herramienta"
+                        )
+                    if not reintento_simulada_usado:
+                        reintento_simulada_usado = True
+                        messages.append({"role": "assistant", "content": content})
+                        messages.append(
+                            {"role": "user", "content": _MENSAJE_CORRECTIVO_TOOL_SIMULADA}
+                        )
+                        continue
                 self.sesion.registrar_asistente(content)
                 return content
 

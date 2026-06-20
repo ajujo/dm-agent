@@ -159,6 +159,54 @@ narrativo lo justifica.
 
 ---
 
+## F6.1 — Disciplina de uso de tools y refuerzo del prompt (robustez del agente)
+
+> No es parte de la "Fase 6" de creación de mundo (más abajo): es una
+> corrección de robustez del agente, descubierta durante la prueba manual de
+> F5.6 con un endpoint real (vLLM, perfil `rapido`).
+
+**Objetivo.** ✅ **Implementada** (commit `fix: enforce tool use discipline`).
+Durante la prueba manual real, el modelo respondió a veces con un bloque de
+texto tipo `[{"name": "ficha_leer", "arguments": {...}}]` simulando una tool
+call sin ejecutarla de verdad — y siguió haciéndolo incluso después de que el
+usuario le pidiera explícitamente no hacerlo. F6.1 corrige esto en dos
+frentes: el system prompt y un detector con reintento en el agent loop. **No
+añade mecánicas de combate ni reglas nuevas.**
+
+- **Prompt** (`src/dm_agent/prompts/system_dm_minimo.md`, también actualizado
+  para reflejar que ficha/HP/inventario/combate/memoria narrativa **sí**
+  existen ya — el texto original de F2.2 decía lo contrario): nueva sección
+  "REGLA ABSOLUTA SOBRE HERRAMIENTAS" (prohíbe explícitamente escribir tool
+  calls como texto/JSON; exige decir "No puedo ejecutar esa herramienta en
+  este turno" si no puede usarla; prohíbe afirmar "he leído/guardado/
+  tirado/atacado/dañado/avanzado turno/cerrado sesión" sin tool real),
+  "ESTADO MECÁNICO" (lista cerrada de qué cambios requieren tool real),
+  regla de campaña/personaje por defecto (no inventar `campaña_id`/
+  `personaje_id`), y regla de no duplicar combates (`combate_estado` antes de
+  `combate_iniciar` si puede haber uno activo).
+- **Detector + reintento** (`src/dm_agent/nucleo/agente.py`):
+  `_contiene_tool_call_simulada` reconoce el patrón `"name"`+`"arguments"`
+  típico de una tool call simulada en texto **sin parsearlo ni ejecutarlo**
+  (sería peligroso). Cuando la respuesta no trae `tool_calls` reales pero
+  contiene ese patrón, `AgenteDM.responder` reintenta **una sola vez** por
+  turno con un mensaje correctivo; en `--debug` siempre imprime un aviso. Si
+  el modelo insiste tras el reintento, se devuelve tal cual (no hay bucle).
+
+**Archivos.** `src/dm_agent/prompts/system_dm_minimo.md`,
+`src/dm_agent/nucleo/agente.py`.
+
+**Tests.** `tests/test_tool_discipline.py` (prompt + detector + reintento
+único, sin red ni LLM real).
+
+**Definición de hecho.** El prompt prohíbe explícitamente tool calls
+simuladas en JSON y exige tool real para cualquier cambio de estado
+mecánico; el agent loop detecta el patrón y reintenta una vez antes de
+rendirse. No corrige el modelo si este ignora la instrucción tras el
+reintento — eso es comportamiento del modelo, no algo que `dm-agent` pueda
+forzar desde el cliente.
+
+---
+
 ## Fase 6 — Creación de mundo, campaña, aventura
 
 **Objetivo.** Skills `crear-mundo`, `crear-campana`, `crear-aventura`. Migración de `config/tonos/` desde dnd5e.
