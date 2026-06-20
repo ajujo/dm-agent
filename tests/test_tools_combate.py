@@ -2,8 +2,10 @@
 
 import pytest
 
+from dm_agent.esquemas.ficha import Ficha
 from dm_agent.estado.combate import GestorCombateNarrativo
 from dm_agent.estado.eventos import RegistroEventosEstado
+from dm_agent.estado.gestor import GestorEstado
 from dm_agent.herramientas.combate import crear_tools_combate
 from dm_agent.herramientas.registro import RegistroHerramientas
 
@@ -26,8 +28,9 @@ _ENEMIGO_RATA = {
 def entorno(tmp_path):
     gestor = GestorCombateNarrativo(tmp_path)
     eventos = RegistroEventosEstado(tmp_path)
+    gestor_estado = GestorEstado(tmp_path)
     reg = RegistroHerramientas()
-    for tool in crear_tools_combate(gestor, eventos):
+    for tool in crear_tools_combate(gestor, eventos, gestor_estado):
         reg.registrar(tool)
     return reg, gestor, eventos
 
@@ -221,6 +224,7 @@ def test_esquemas_disponibles_contienen_tools_combate(entorno):
         "combate_iniciar", "combate_estado", "combate_anadir_enemigo",
         "combate_dano_enemigo", "combate_terminar",
         "combate_tirar_iniciativa", "combate_turno_actual", "combate_avanzar_turno",
+        "combate_atacar_enemigo", "combate_atacar_personaje",
     }
     assert esperados <= nombres
 
@@ -238,3 +242,58 @@ def test_dispatch_api_tirar_iniciativa(entorno, monkeypatch):
     )
     assert res.ok
     assert len(res.datos["orden_iniciativa"]) == 2
+
+
+def test_dispatch_api_atacar_enemigo(entorno, monkeypatch):
+    reg, _, _ = entorno
+    res1 = _iniciar(reg)
+    combate_id = res1.datos["combate"]["id"]
+    monkeypatch.setattr(
+        "dm_agent.herramientas.combate._tirar_ataque_d20", lambda mod, semilla: (15, 15 + mod)
+    )
+    monkeypatch.setattr("dm_agent.herramientas.combate._tirar_dano", lambda expr, semilla: 4)
+    res = reg.dispatch_api(
+        "combate_atacar_enemigo", ctx=None, campaña_id=CAMP, combate_id=combate_id,
+        atacante_id="pj_tyr", enemigo_id="rata_1", modificador_ataque=5, dano="1d8+3",
+    )
+    assert res.ok
+    assert res.datos["impacta"] is True
+    assert res.datos["hp_despues"] == 3
+
+
+def _ficha_dict(personaje_id="pj_tyr", hp_actual=20, hp_max=20, ca=14):
+    return {
+        "id": personaje_id,
+        "nombre": "Tyr",
+        "clase": "Guerrero",
+        "nivel": 2,
+        "raza": "Humano",
+        "atributos": {
+            "fuerza": 16, "destreza": 12, "constitucion": 14,
+            "inteligencia": 10, "sabiduria": 11, "carisma": 8,
+        },
+        "hp_max": hp_max,
+        "hp_actual": hp_actual,
+        "ca": ca,
+        "bonificador_competencia": 2,
+    }
+
+
+def test_dispatch_api_atacar_personaje(entorno, monkeypatch):
+    reg, gestor, _ = entorno
+    gestor_estado = GestorEstado(gestor.raiz)
+    gestor_estado.guardar_ficha(CAMP, Ficha.model_validate(_ficha_dict()))
+
+    res1 = _iniciar(reg)
+    combate_id = res1.datos["combate"]["id"]
+    monkeypatch.setattr(
+        "dm_agent.herramientas.combate._tirar_ataque_d20", lambda mod, semilla: (15, 15 + mod)
+    )
+    monkeypatch.setattr("dm_agent.herramientas.combate._tirar_dano", lambda expr, semilla: 4)
+    res = reg.dispatch_api(
+        "combate_atacar_personaje", ctx=None, campaña_id=CAMP, combate_id=combate_id,
+        enemigo_id="rata_1", personaje_id="pj_tyr", modificador_ataque=4, dano="1d6+2",
+    )
+    assert res.ok
+    assert res.datos["impacta"] is True
+    assert res.datos["hp_despues"] == 16

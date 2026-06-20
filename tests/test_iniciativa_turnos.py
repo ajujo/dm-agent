@@ -10,6 +10,7 @@ import pytest
 
 from dm_agent.estado.combate import GestorCombateNarrativo
 from dm_agent.estado.eventos import RegistroEventosEstado
+from dm_agent.estado.gestor import GestorEstado
 from dm_agent.herramientas.combate import crear_tools_combate
 from dm_agent.herramientas.registro import RegistroHerramientas
 
@@ -22,8 +23,9 @@ _ENEMIGO_RATA = {"id": "rata_1", "nombre": "Rata gigante", "hp_max": 7, "hp_actu
 def entorno(tmp_path):
     gestor = GestorCombateNarrativo(tmp_path)
     eventos = RegistroEventosEstado(tmp_path)
+    gestor_estado = GestorEstado(tmp_path)
     reg = RegistroHerramientas()
-    for tool in crear_tools_combate(gestor, eventos):
+    for tool in crear_tools_combate(gestor, eventos, gestor_estado):
         reg.registrar(tool)
     return reg, gestor, eventos
 

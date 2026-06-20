@@ -1,39 +1,54 @@
 """Tools de combate narrativo mínimo (F5.1, distancias revisadas en F5.1.1,
-iniciativa/turnos añadidos en F5.2).
+iniciativa/turnos añadidos en F5.2, ataques básicos contra CA en F5.3).
 
 `combate.iniciar`, `combate.estado`, `combate.añadir_enemigo`,
 `combate.daño_enemigo`, `combate.terminar`, `combate.tirar_iniciativa`,
-`combate.turno_actual`, `combate.avanzar_turno`.
+`combate.turno_actual`, `combate.avanzar_turno`, `combate.atacar_enemigo`,
+`combate.atacar_personaje`.
 
 Combate narrativo en el sentido de D17: teatro de la mente, sin grid, sin
 casillas, sin economía de acciones completa. Se conserva el vocabulario de
 combate de D&D (enemigo, ataque, daño, estado, distancia, iniciativa, turno)
 pero se resuelve de forma conversacional, sin geometría exacta. El daño al
-personaje jugador sigue pasando por `hp_xp.aplicar_daño`; estas tools solo
-gestionan el estado de los enemigos simples y el orden de turnos dentro de la
-escena. Cada mutación registra un `Evento` auditable, igual que `hp_xp.*`
-(F3.4).
+personaje jugador por fuera de un ataque resuelto sigue pasando por
+`hp_xp.aplicar_daño`; estas tools gestionan el estado de los enemigos
+simples, el orden de turnos y la resolución de ataques dentro de la escena.
+Cada mutación registra un `Evento` auditable, igual que `hp_xp.*` (F3.4).
 
 La iniciativa es clásica: 1d20 + modificador de Destreza (D-COMBATE-01). El
 DM Agent tira automáticamente por los enemigos (D-COMBATE-02); el jugador
 sigue resolviendo la suya. Las tiradas usan `dm_agent.herramientas.dados.tirar`
 (mismo motor que `dados.tirar`); con `semilla` son deterministas para tests,
 sin ella son aleatorias de verdad en runtime.
+
+Ataques (F5.3): 1d20 + modificador de ataque contra la CA del objetivo;
+natural 1 falla siempre (pifia), natural 20 impacta siempre (crítico). El
+daño al personaje en `combate.atacar_personaje` se aplica directamente sobre
+`Ficha` (vía `GestorEstado`) y registra solo `ataque_personaje_resuelto`
+— deliberadamente **no** se llama a `hp_xp.aplicar_daño` para evitar
+duplicar el evento de daño (ver ADR-0018). `combate.atacar_enemigo` no
+avanza turno automáticamente: el avance sigue siendo explícito vía
+`combate.avanzar_turno`.
 """
 
 from __future__ import annotations
 
+import re
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import ValidationError
 
 from dm_agent.esquemas.combate import CombateNarrativo, EnemigoCombate, EntradaIniciativa
 from dm_agent.esquemas.evento import crear_evento
+from dm_agent.esquemas.ficha import Ficha
 from dm_agent.estado.combate import ErrorCombateNoEncontrado, GestorCombateNarrativo
 from dm_agent.estado.eventos import RegistroEventosEstado
+from dm_agent.estado.gestor import ErrorEstado, ErrorEstadoNoEncontrado, GestorEstado
 from dm_agent.herramientas.base import ResultadoHerramienta
 from dm_agent.herramientas.dados import tirar as tirar_dados
+from dm_agent.herramientas.hp_xp import estado_vital
 
 _ACTOR_DM = "dm"
 
@@ -119,6 +134,109 @@ def _semilla_participante(semilla_base: int | None, indice: int) -> int | None:
 def _orden_iniciativa_orden(entrada: EntradaIniciativa) -> tuple[int, int, str, str]:
     """Clave de orden: iniciativa descendente; empate -> personaje gana; luego nombre/id estable."""
     return (-entrada.iniciativa, 0 if entrada.es_personaje else 1, entrada.nombre, entrada.participante_id)
+
+
+@dataclass(slots=True)
+class ResultadoAtaque:
+    """Resultado de resolver un ataque contra CA (F5.3).
+
+    No se persiste tal cual; se vuelca a evento auditable y a la respuesta de la tool.
+    """
+
+    atacante_id: str
+    objetivo_id: str
+    tirada_d20: int
+    modificador_ataque: int
+    total_ataque: int
+    ca_objetivo: int
+    impacta: bool
+    critico: bool
+    pifia: bool
+    dano: int
+    tipo_dano: str | None
+    motivo: str | None
+
+
+def _validar_modificador_ataque(valor: Any) -> tuple[int | None, str | None]:
+    if isinstance(valor, bool) or not isinstance(valor, int):
+        return None, "'modificador_ataque' debe ser un entero"
+    return valor, None
+
+
+def _tirar_ataque_d20(mod: int, semilla: int | None) -> tuple[int, int]:
+    """1d20 + mod de ataque. Devuelve (tirada_natural, total)."""
+    r = tirar_dados(f"1d20{mod:+d}", semilla=semilla)
+    return r.dados[0], r.total
+
+
+def _tirar_dano(expresion: str, semilla: int | None) -> int:
+    """Tira una expresión de daño (ej. '1d8+3'); nunca negativo."""
+    return max(0, tirar_dados(expresion, semilla=semilla).total)
+
+
+_REGEX_EXPR_DANO = re.compile(r"^\s*(\d+)\s*d\s*(\d+)\s*([+-]\s*\d+)?\s*$", re.IGNORECASE)
+
+
+def _duplicar_dados_critico(expresion: str) -> str:
+    """Duplica el número de dados (no el modificador) para un crítico limpio.
+
+    Si la expresión no encaja con el patrón NdM[+/-mod], se devuelve sin
+    tocar (no debería ocurrir: ya se validó como expresión de dados antes).
+    """
+    m = _REGEX_EXPR_DANO.match(expresion)
+    if not m:
+        return expresion
+    n = int(m.group(1))
+    caras = m.group(2)
+    mod = m.group(3) or ""
+    return f"{n * 2}d{caras}{mod}"
+
+
+def _resolver_ataque(
+    *,
+    atacante_id: str,
+    objetivo_id: str,
+    modificador_ataque: int,
+    ca_objetivo: int,
+    dano_expr: str,
+    tipo_dano: str | None,
+    motivo: str | None,
+    semilla: int | None,
+) -> tuple[ResultadoAtaque | None, ResultadoHerramienta | None]:
+    """1d20 + modificador contra CA; natural 1 falla siempre, natural 20 impacta siempre.
+
+    Si impacta, tira daño (duplicando dados en crítico) vía el motor de dados existente.
+    Comparte esta lógica `combate.atacar_enemigo` y `combate.atacar_personaje`.
+    """
+    tirada_natural, total_ataque = _tirar_ataque_d20(modificador_ataque, semilla)
+    pifia = tirada_natural == 1
+    critico = tirada_natural == 20
+    impacta = critico or (not pifia and total_ataque >= ca_objetivo)
+
+    dano_total = 0
+    if impacta:
+        expr_dano = _duplicar_dados_critico(dano_expr) if critico else dano_expr
+        semilla_dano = None if semilla is None else semilla + 1
+        try:
+            dano_total = _tirar_dano(expr_dano, semilla_dano)
+        except ValueError as e:
+            return None, ResultadoHerramienta(ok=False, errores=[f"'dano' inválido: {e}"])
+
+    resultado = ResultadoAtaque(
+        atacante_id=atacante_id,
+        objetivo_id=objetivo_id,
+        tirada_d20=tirada_natural,
+        modificador_ataque=modificador_ataque,
+        total_ataque=total_ataque,
+        ca_objetivo=ca_objetivo,
+        impacta=impacta,
+        critico=critico,
+        pifia=pifia,
+        dano=dano_total,
+        tipo_dano=tipo_dano,
+        motivo=motivo,
+    )
+    return resultado, None
 
 
 class _ToolCombateBase:
@@ -717,10 +835,311 @@ class _ToolAvanzarTurno(_ToolCombateBase):
         )
 
 
+class _ToolAtacarEnemigo(_ToolCombateBase):
+    nombre = "combate.atacar_enemigo"
+    descripcion = (
+        "Resuelve un ataque contra un enemigo: 1d20 + modificador_ataque contra su CA. "
+        "Natural 1 falla siempre (pifia); natural 20 impacta siempre (crítico, daño duplicado). "
+        "Si impacta, aplica daño al enemigo. No avanza turno: usa combate.avanzar_turno aparte."
+    )
+    modifica = ["combate", "eventos"]
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "campaña_id": {"type": "string"},
+            "combate_id": {"type": "string"},
+            "atacante_id": {"type": "string"},
+            "enemigo_id": {"type": "string"},
+            "modificador_ataque": {"type": "integer"},
+            "dano": {"type": "string", "description": "Expresión de dados, ej. '1d8+3'."},
+            "tipo_dano": {"type": "string"},
+            "motivo": {"type": "string"},
+            "semilla": {
+                "type": "integer",
+                "description": "Semilla opcional para tiradas reproducibles (tests/depuración).",
+            },
+        },
+        "required": ["campaña_id", "combate_id", "atacante_id", "enemigo_id", "modificador_ataque", "dano"],
+        "additionalProperties": False,
+    }
+
+    def ejecutar(self, ctx: Any, **args: Any) -> ResultadoHerramienta:
+        campaña_id = args.get("campaña_id")
+        combate, err = self._cargar(campaña_id, args.get("combate_id"))
+        if err:
+            return err
+        assert combate is not None
+
+        atacante_id = args.get("atacante_id")
+        enemigo_id = args.get("enemigo_id")
+        if not atacante_id or not enemigo_id:
+            return ResultadoHerramienta(ok=False, errores=["faltan 'atacante_id' y/o 'enemigo_id'"])
+
+        enemigo = next((e for e in combate.enemigos if e.id == enemigo_id), None)
+        if enemigo is None:
+            return ResultadoHerramienta(
+                ok=False, errores=[f"enemigo no existe en este combate: {enemigo_id!r}"]
+            )
+
+        modificador, error_mod = _validar_modificador_ataque(args.get("modificador_ataque"))
+        if error_mod:
+            return ResultadoHerramienta(ok=False, errores=[error_mod])
+        assert modificador is not None
+
+        dano_expr = args.get("dano")
+        if not isinstance(dano_expr, str) or not dano_expr.strip():
+            return ResultadoHerramienta(
+                ok=False, errores=["'dano' debe ser una expresión de dados no vacía (ej. '1d8+3')"]
+            )
+
+        tipo_dano = args.get("tipo_dano")
+        motivo = args.get("motivo")
+        resultado, error_dado = _resolver_ataque(
+            atacante_id=atacante_id,
+            objetivo_id=enemigo_id,
+            modificador_ataque=modificador,
+            ca_objetivo=enemigo.ca,
+            dano_expr=dano_expr,
+            tipo_dano=tipo_dano,
+            motivo=motivo,
+            semilla=args.get("semilla"),
+        )
+        if error_dado:
+            return error_dado
+        assert resultado is not None
+
+        hp_antes = enemigo.hp_actual
+        hp_despues = hp_antes
+        nuevo_estado = enemigo.estado
+        combate_actualizado = combate
+        if resultado.impacta:
+            hp_despues = max(0, hp_antes - resultado.dano)
+            nuevo_estado = _estado_tras_daño(hp_despues, enemigo.hp_max)
+            enemigo_actualizado = enemigo.model_copy(
+                update={"hp_actual": hp_despues, "estado": nuevo_estado}
+            )
+            nuevos_enemigos = [
+                enemigo_actualizado if e.id == enemigo_id else e for e in combate.enemigos
+            ]
+            combate_actualizado = combate.model_copy(update={"enemigos": nuevos_enemigos})
+            self.gestor.guardar(combate_actualizado)
+
+        self.eventos.registrar(
+            campaña_id,
+            crear_evento(
+                "ataque_enemigo_resuelto",
+                actor=_ACTOR_DM,
+                objetivo=enemigo_id,
+                tool=self.nombre,
+                motivo=motivo,
+                datos={
+                    "campaña_id": campaña_id,
+                    "combate_id": combate.id,
+                    "atacante_id": atacante_id,
+                    "objetivo_id": enemigo_id,
+                    "tirada_d20": resultado.tirada_d20,
+                    "modificador_ataque": modificador,
+                    "total_ataque": resultado.total_ataque,
+                    "ca_objetivo": enemigo.ca,
+                    "impacta": resultado.impacta,
+                    "critico": resultado.critico,
+                    "pifia": resultado.pifia,
+                    "dano": resultado.dano,
+                    "tipo_dano": tipo_dano,
+                    "hp_antes": hp_antes,
+                    "hp_despues": hp_despues,
+                    "motivo": motivo,
+                },
+            ),
+        )
+        return ResultadoHerramienta(
+            ok=True,
+            datos={
+                "combate_id": combate.id,
+                "atacante_id": atacante_id,
+                "enemigo_id": enemigo_id,
+                "tirada_d20": resultado.tirada_d20,
+                "modificador_ataque": modificador,
+                "total_ataque": resultado.total_ataque,
+                "ca_objetivo": enemigo.ca,
+                "impacta": resultado.impacta,
+                "critico": resultado.critico,
+                "pifia": resultado.pifia,
+                "dano": resultado.dano,
+                "tipo_dano": tipo_dano,
+                "hp_antes": hp_antes,
+                "hp_despues": hp_despues,
+                "estado": nuevo_estado,
+                "combate": combate_actualizado.model_dump(mode="json"),
+            },
+        )
+
+
+class _ToolAtacarPersonaje(_ToolCombateBase):
+    nombre = "combate.atacar_personaje"
+    descripcion = (
+        "Resuelve un ataque de un enemigo contra el personaje jugador: 1d20 + "
+        "modificador_ataque contra ficha.ca. Natural 1 falla siempre (pifia); natural 20 "
+        "impacta siempre (crítico, daño duplicado). Si impacta, aplica daño directamente a la "
+        "Ficha (no llama a hp_xp.aplicar_daño, para no duplicar evento). No avanza turno."
+    )
+    modifica = ["combate", "ficha", "eventos"]
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "campaña_id": {"type": "string"},
+            "combate_id": {"type": "string"},
+            "enemigo_id": {"type": "string"},
+            "personaje_id": {"type": "string"},
+            "modificador_ataque": {"type": "integer"},
+            "dano": {"type": "string", "description": "Expresión de dados, ej. '1d6+2'."},
+            "tipo_dano": {"type": "string"},
+            "motivo": {"type": "string"},
+            "semilla": {
+                "type": "integer",
+                "description": "Semilla opcional para tiradas reproducibles (tests/depuración).",
+            },
+        },
+        "required": [
+            "campaña_id", "combate_id", "enemigo_id", "personaje_id", "modificador_ataque", "dano",
+        ],
+        "additionalProperties": False,
+    }
+
+    def __init__(
+        self,
+        gestor: GestorCombateNarrativo,
+        registro_eventos: RegistroEventosEstado,
+        gestor_estado: GestorEstado,
+    ) -> None:
+        super().__init__(gestor, registro_eventos)
+        self.gestor_estado = gestor_estado
+
+    def ejecutar(self, ctx: Any, **args: Any) -> ResultadoHerramienta:
+        campaña_id = args.get("campaña_id")
+        combate, err = self._cargar(campaña_id, args.get("combate_id"))
+        if err:
+            return err
+        assert combate is not None
+
+        enemigo_id = args.get("enemigo_id")
+        personaje_id = args.get("personaje_id")
+        if not enemigo_id or not personaje_id:
+            return ResultadoHerramienta(ok=False, errores=["faltan 'enemigo_id' y/o 'personaje_id'"])
+
+        enemigo = next((e for e in combate.enemigos if e.id == enemigo_id), None)
+        if enemigo is None:
+            return ResultadoHerramienta(
+                ok=False, errores=[f"enemigo no existe en este combate: {enemigo_id!r}"]
+            )
+        if personaje_id != combate.personaje_id:
+            return ResultadoHerramienta(
+                ok=False,
+                errores=[
+                    f"'personaje_id' ({personaje_id!r}) no coincide con el personaje del "
+                    f"combate ({combate.personaje_id!r})"
+                ],
+            )
+
+        if not self.gestor_estado.existe_campaña(campaña_id):
+            return ResultadoHerramienta(ok=False, errores=[f"campaña no existe: {campaña_id!r}"])
+        try:
+            ficha = self.gestor_estado.cargar_ficha(campaña_id, personaje_id)
+        except ErrorEstadoNoEncontrado:
+            return ResultadoHerramienta(ok=False, errores=[f"ficha no existe: {personaje_id!r}"])
+        except ErrorEstado as e:
+            return ResultadoHerramienta(ok=False, errores=[f"ficha inválida: {e}"])
+
+        modificador, error_mod = _validar_modificador_ataque(args.get("modificador_ataque"))
+        if error_mod:
+            return ResultadoHerramienta(ok=False, errores=[error_mod])
+        assert modificador is not None
+
+        dano_expr = args.get("dano")
+        if not isinstance(dano_expr, str) or not dano_expr.strip():
+            return ResultadoHerramienta(
+                ok=False, errores=["'dano' debe ser una expresión de dados no vacía (ej. '1d6+2')"]
+            )
+
+        tipo_dano = args.get("tipo_dano")
+        motivo = args.get("motivo")
+        resultado, error_dado = _resolver_ataque(
+            atacante_id=enemigo_id,
+            objetivo_id=personaje_id,
+            modificador_ataque=modificador,
+            ca_objetivo=ficha.ca,
+            dano_expr=dano_expr,
+            tipo_dano=tipo_dano,
+            motivo=motivo,
+            semilla=args.get("semilla"),
+        )
+        if error_dado:
+            return error_dado
+        assert resultado is not None
+
+        hp_antes = ficha.hp_actual
+        hp_despues = hp_antes
+        if resultado.impacta:
+            hp_despues = max(0, hp_antes - resultado.dano)
+            ficha_actualizada = Ficha.model_validate({**ficha.model_dump(), "hp_actual": hp_despues})
+            self.gestor_estado.guardar_ficha(campaña_id, ficha_actualizada)
+
+        self.eventos.registrar(
+            campaña_id,
+            crear_evento(
+                "ataque_personaje_resuelto",
+                actor=_ACTOR_DM,
+                objetivo=personaje_id,
+                tool=self.nombre,
+                motivo=motivo,
+                datos={
+                    "campaña_id": campaña_id,
+                    "combate_id": combate.id,
+                    "atacante_id": enemigo_id,
+                    "objetivo_id": personaje_id,
+                    "tirada_d20": resultado.tirada_d20,
+                    "modificador_ataque": modificador,
+                    "total_ataque": resultado.total_ataque,
+                    "ca_objetivo": ficha.ca,
+                    "impacta": resultado.impacta,
+                    "critico": resultado.critico,
+                    "pifia": resultado.pifia,
+                    "dano": resultado.dano,
+                    "tipo_dano": tipo_dano,
+                    "hp_antes": hp_antes,
+                    "hp_despues": hp_despues,
+                    "motivo": motivo,
+                },
+            ),
+        )
+        return ResultadoHerramienta(
+            ok=True,
+            datos={
+                "combate_id": combate.id,
+                "enemigo_id": enemigo_id,
+                "personaje_id": personaje_id,
+                "tirada_d20": resultado.tirada_d20,
+                "modificador_ataque": modificador,
+                "total_ataque": resultado.total_ataque,
+                "ca_objetivo": ficha.ca,
+                "impacta": resultado.impacta,
+                "critico": resultado.critico,
+                "pifia": resultado.pifia,
+                "dano": resultado.dano,
+                "tipo_dano": tipo_dano,
+                "hp_antes": hp_antes,
+                "hp_despues": hp_despues,
+                "estado_vital": estado_vital(hp_despues, ficha.hp_max),
+            },
+        )
+
+
 def crear_tools_combate(
-    gestor: GestorCombateNarrativo, registro_eventos: RegistroEventosEstado
+    gestor: GestorCombateNarrativo,
+    registro_eventos: RegistroEventosEstado,
+    gestor_estado: GestorEstado,
 ) -> list[Any]:
-    """Crea las ocho tools de combate enlazadas al gestor y al registro de eventos."""
+    """Crea las diez tools de combate enlazadas a los gestores y al registro de eventos."""
     return [
         _ToolIniciar(gestor, registro_eventos),
         _ToolEstado(gestor, registro_eventos),
@@ -730,4 +1149,6 @@ def crear_tools_combate(
         _ToolTirarIniciativa(gestor, registro_eventos),
         _ToolTurnoActual(gestor, registro_eventos),
         _ToolAvanzarTurno(gestor, registro_eventos),
+        _ToolAtacarEnemigo(gestor, registro_eventos),
+        _ToolAtacarPersonaje(gestor, registro_eventos, gestor_estado),
     ]

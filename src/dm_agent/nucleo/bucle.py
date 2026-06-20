@@ -82,7 +82,7 @@ def _crear_registro(
         registro.registrar(tool)
     for tool in crear_tools_entidades(entidades_narrativas):
         registro.registrar(tool)
-    for tool in crear_tools_combate(combate, registro_eventos):
+    for tool in crear_tools_combate(combate, registro_eventos, gestor):
         registro.registrar(tool)
     return registro
 

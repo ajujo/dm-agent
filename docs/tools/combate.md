@@ -1,18 +1,20 @@
-# Tools `combate.*` (F5.1, distancias revisadas en F5.1.1, iniciativa/turnos en F5.2)
+# Tools `combate.*` (F5.1, distancias en F5.1.1, iniciativa/turnos en F5.2, ataques contra CA en F5.3)
 
-> Módulo: `dm_agent.herramientas.combate` · Fase: F5.1 / F5.1.1 / F5.2
+> Módulo: `dm_agent.herramientas.combate` · Fase: F5.1 / F5.1.1 / F5.2 / F5.3
 
 ## Propósito
 
 Sostener escenas de combate **narrativo** (teatro de la mente, D17): crear la
-escena, añadir enemigos simples, consultar el estado, aplicar daño a
-enemigos y terminarla, todo con eventos auditables. El combate sí es
-importante en D&D: se conserva su vocabulario (`combate`, `enemigo`, `daño`,
-`distancia`...), pero se resuelve de forma conversacional, sin grid ni
-medición exacta — ver
+escena, añadir enemigos simples, consultar el estado, resolver ataques
+contra CA, aplicar daño y terminarla, todo con eventos auditables. El
+combate sí es importante en D&D: se conserva su vocabulario (`combate`,
+`enemigo`, `ataque`, `daño`, `distancia`...), pero se resuelve de forma
+conversacional, sin grid ni medición exacta — ver
 [`../estado/combate.md`](../estado/combate.md) para el detalle de esquemas y
-persistencia. El daño al **personaje jugador** sigue pasando por
-[`hp_xp.md`](hp_xp.md) (`hp_xp.aplicar_daño`); estas tools no lo tocan.
+persistencia. El daño al **personaje jugador** fuera de un ataque resuelto
+sigue pasando por [`hp_xp.md`](hp_xp.md) (`hp_xp.aplicar_daño`);
+`combate.atacar_personaje` aplica daño directamente sin pasar por esa tool
+(ver más abajo).
 
 ## Tools
 
@@ -26,6 +28,8 @@ persistencia. El daño al **personaje jugador** sigue pasando por
 | `combate.tirar_iniciativa` | `combate_tirar_iniciativa` | sí | `iniciativa_tirada` |
 | `combate.turno_actual` | `combate_turno_actual` | no | no |
 | `combate.avanzar_turno` | `combate_avanzar_turno` | sí | `turno_avanzado` |
+| `combate.atacar_enemigo` | `combate_atacar_enemigo` | sí | `ataque_enemigo_resuelto` |
+| `combate.atacar_personaje` | `combate_atacar_personaje` | sí | `ataque_personaje_resuelto` |
 
 ## `combate_iniciar`
 
@@ -193,6 +197,65 @@ y aumenta `ronda` en 1. Si no se ha tirado iniciativa, devuelve error.
 Devuelve `combate_id`, `turno_actual` (nueva entrada), `indice_turno_actual`,
 `ronda` y el `combate` completo actualizado.
 
+## `combate_atacar_enemigo`
+
+```json
+{
+  "campaña_id": "campana_demo",
+  "combate_id": "combate_001",
+  "atacante_id": "pj_tyr",
+  "enemigo_id": "rata_1",
+  "modificador_ataque": 5,
+  "dano": "1d8+3",
+  "tipo_dano": "cortante",
+  "motivo": "Tyr ataca con su espada larga"
+}
+```
+
+Requeridos: `campaña_id`, `combate_id`, `atacante_id`, `enemigo_id`,
+`modificador_ataque` (entero), `dano` (expresión de dados, ej. `"1d8+3"`).
+Tira `1d20 + modificador_ataque` contra `enemigo.ca`:
+
+```text
+natural 1                          -> falla siempre (pifia=true)
+natural 20                         -> impacta siempre (critico=true, daño x2 en dados)
+total_ataque >= ca_objetivo         -> impacta
+total_ataque < ca_objetivo          -> falla
+```
+
+Si impacta, aplica daño al enemigo con el mismo umbral de estado que
+`combate_dano_enemigo`. Si falla, no modifica el HP. **No avanza turno**:
+usa `combate_avanzar_turno` aparte. Opcional `semilla` para tiradas
+reproducibles. Devuelve `tirada_d20`, `modificador_ataque`, `total_ataque`,
+`ca_objetivo`, `impacta`, `critico`, `pifia`, `dano`, `tipo_dano`,
+`hp_antes`, `hp_despues`, `estado` y el `combate` completo actualizado.
+
+## `combate_atacar_personaje`
+
+```json
+{
+  "campaña_id": "campana_demo",
+  "combate_id": "combate_001",
+  "enemigo_id": "rata_1",
+  "personaje_id": "pj_tyr",
+  "modificador_ataque": 4,
+  "dano": "1d6+2",
+  "tipo_dano": "perforante",
+  "motivo": "La rata muerde a Tyr"
+}
+```
+
+Requeridos: `campaña_id`, `combate_id`, `enemigo_id`, `personaje_id`
+(debe coincidir con el `personaje_id` del combate), `modificador_ataque`,
+`dano`. Carga la `Ficha` vía `GestorEstado` y usa `ficha.ca` como objetivo;
+misma lógica de natural 1/20 que `combate_atacar_enemigo`. Si impacta,
+aplica el daño **directamente sobre la `Ficha`** (no llama a
+`hp_xp.aplicar_daño`, para no registrar dos eventos de daño por el mismo
+ataque — ver [ADR-0018](../decisiones/0018-combate-dnd-narrativo.md)). Si
+falla, no modifica la ficha. **No avanza turno**. Devuelve `tirada_d20`,
+`modificador_ataque`, `total_ataque`, `ca_objetivo`, `impacta`, `critico`,
+`pifia`, `dano`, `tipo_dano`, `hp_antes`, `hp_despues` y `estado_vital`.
+
 ## Eventos auditables
 
 Cada mutación registra un `Evento` (F3.1) en `eventos.jsonl` vía
@@ -206,20 +269,25 @@ Cada mutación registra un `Evento` (F3.1) en `eventos.jsonl` vía
 | `combate_terminado` | `campaña_id`, `combate_id`, `resultado`, `motivo` |
 | `iniciativa_tirada` | `campaña_id`, `combate_id`, `orden_iniciativa`, `ronda` |
 | `turno_avanzado` | `campaña_id`, `combate_id`, `turno_anterior`, `turno_actual`, `ronda`, `motivo` |
-
-`combate_estado` no registra evento (es de solo lectura).
+| `ataque_enemigo_resuelto` | `campaña_id`, `combate_id`, `atacante_id`, `objetivo_id`, `tirada_d20`, `modificador_ataque`, `total_ataque`, `ca_objetivo`, `impacta`, `critico`, `pifia`, `dano`, `tipo_dano`, `hp_antes`, `hp_despues`, `motivo` |
+| `ataque_personaje_resuelto` | (mismos campos que arriba; `atacante_id` es el `enemigo_id`, `objetivo_id` es el `personaje_id`) |
 
 `combate_estado`, `combate_turno_actual` no registran evento (son de solo
-lectura).
+lectura). `combate_atacar_personaje` registra **solo**
+`ataque_personaje_resuelto`: no se registra además `daño_aplicado` de
+`hp_xp.*` para el mismo ataque (decisión explícita, ver
+[ADR-0018](../decisiones/0018-combate-dnd-narrativo.md)).
 
 ## Errores
 
-`campaña_id`/`personaje_id`/`combate_id`/`enemigo_id` vacíos o faltantes,
-combate inexistente, enemigo inexistente en el combate, id de enemigo
-duplicado, `cantidad`/`mod_destreza` inválidos, `personaje.id` que no
-coincide con el del combate, combate activo ya en curso al iniciar uno
-nuevo, o iniciativa no tirada todavía al consultar/avanzar turno →
-`ResultadoHerramienta(ok=False, errores=[...])`. Sin tracebacks al LLM.
+`campaña_id`/`personaje_id`/`combate_id`/`enemigo_id`/`atacante_id` vacíos o
+faltantes, combate inexistente, enemigo inexistente en el combate, id de
+enemigo duplicado, `cantidad`/`mod_destreza`/`modificador_ataque` inválidos,
+`dano` con expresión de dados inválida, `personaje.id`/`personaje_id` que no
+coincide con el del combate, ficha inexistente, combate activo ya en curso
+al iniciar uno nuevo, o iniciativa no tirada todavía al consultar/avanzar
+turno → `ResultadoHerramienta(ok=False, errores=[...])`. Sin tracebacks al
+LLM.
 
 ## Distancias (`EnemigoCombate.distancia`)
 
@@ -235,14 +303,25 @@ justifique (p. ej. alguien abandona `cuerpo_a_cuerpo` de forma arriesgada),
 pero **el jugador deberá confirmarlo antes de aplicarlo** — nunca se
 aplicará automáticamente.
 
-## Limitaciones (F5.1 / F5.1.1 / F5.2)
+## Distancia y alcance en ataques (F5.3)
 
-- Sin grid/casillas, pies/pulgadas exactos, economía de acciones completa,
-  ataques completos (con CA) ni IA táctica enemiga.
+La `distancia` del enemigo (ver más abajo) **no bloquea** ni valida
+`combate_atacar_enemigo`/`combate_atacar_personaje` en F5.3: es información
+narrativa para que el DM decida si el ataque tiene sentido (una espada pide
+normalmente `cuerpo_a_cuerpo`; un arco puede funcionar a `media`/`larga`).
+Validación dura de alcance queda para fases futuras.
+
+## Limitaciones (F5.1 / F5.1.1 / F5.2 / F5.3)
+
+- Sin grid/casillas, pies/pulgadas exactos ni economía de acciones completa;
+  `distancia` no bloquea ataques por alcance.
+- Sin IA enemiga ni selección automática de acciones: el DM (LLM) decide
+  manualmente cuándo y a quién ataca cada enemigo.
 - Sin reacciones ni ataques de oportunidad **mecánicos** (solo propuesta +
   confirmación del jugador, en fases futuras).
-- Sin flanqueo ni cobertura mecánicos, sin áreas de efecto medidas. Estas
-  reglas se reinterpretan de forma narrativa (ver
+- Sin flanqueo ni cobertura mecánicos, sin áreas de efecto medidas, sin
+  ventaja/desventaja. Las reglas tácticas se reinterpretan de forma
+  narrativa (ver
   [`../estado/combate.md`](../estado/combate.md#reglas-tácticas-adaptables-no-eliminadas-reinterpretadas)).
 - Sin sorpresa, salvaciones de muerte, resistencias/vulnerabilidades ni
   hechizos.
@@ -250,4 +329,5 @@ aplicará automáticamente.
 - Sin inyección de combate al contexto narrativo (ver
   [`../estado/combate.md`](../estado/combate.md#memoria-narrativa)).
 - El LLM no está obligado a usar estas tools: el DM decide cuándo una escena
-  amerita abrir un combate narrativo, tirar iniciativa o avanzar turno.
+  amerita abrir un combate narrativo, tirar iniciativa, atacar o avanzar
+  turno.

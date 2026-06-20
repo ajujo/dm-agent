@@ -125,26 +125,29 @@ Subfases:
 - **F5.1 — Combate narrativo mínimo.** ✅ **Implementada** (commit `feat: add minimal narrative combat`). Esquemas `EnemigoCombate`/`CombateNarrativo` (`esquemas/combate.py`), `GestorCombateNarrativo` (un JSON por combate + referencia de combate activo por campaña) y tools `combate.{iniciar,estado,añadir_enemigo,daño_enemigo,terminar}` con eventos auditables (`combate_iniciado`, `enemigo_añadido`, `daño_enemigo`, `combate_terminado`). El daño al personaje jugador sigue pasando por `hp_xp.aplicar_daño`; no hay XP automática. Sin inyección de combate al contexto narrativo todavía.
 - **F5.1.1 — Alineación de combate D&D narrativo sin grid.** ✅ **Implementada** (commit `refactor: align combat distances with narrative D&D style`). Corrección de diseño, no de API: se conserva `combate.*` como nombre de tools (no se renombra a `conflicto.*`) y el vocabulario D&D (enemigo, ataque, daño, distancia). Las distancias abstractas pasan de `cerca`/`media`/`lejos`/`fuera_de_alcance` a cinco valores narrativos más cercanos al lenguaje de mesa: `cuerpo_a_cuerpo`/`corta`/`media`/`larga`/`fuera_de_alcance`. Documentado el principio: el combate es importante en D&D y se resuelve de forma conversacional, sin grid/casillas/medición exacta, reinterpretando narrativamente reglas como flanqueo o ataques de oportunidad en vez de eliminarlas. Deja preparada (solo documentación) la base de F5.2.
 - **F5.2 — Iniciativa clásica y turnos narrativos.** ✅ **Implementada** (commit `feat: add initiative and narrative turns`). Iniciativa D&D real: `1d20 + mod_destreza` para el personaje, tirada automática para cada enemigo (D-COMBATE-01/02; [ADR-0018](decisiones/0018-combate-dnd-narrativo.md)). Nuevos esquemas `EntradaIniciativa` y campos `CombateNarrativo.{orden_iniciativa,indice_turno_actual,ronda}`, `EnemigoCombate.{mod_destreza,iniciativa}` (opcionales, sin migración necesaria). Tools `combate.{tirar_iniciativa,turno_actual,avanzar_turno}` con eventos `iniciativa_tirada`/`turno_avanzado`. Orden: mayor iniciativa primero, empate personaje > enemigo, empate entre enemigos estable por nombre/id. Tiradas vía el motor de dados existente (`herramientas/dados.py`), deterministas con `semilla` para tests. Reacciones/ataques de oportunidad/flanqueo narrativos quedan documentados (D-COMBATE-04: el agente los propone, el jugador confirma) pero **no implementados como mecánica**.
+- **F5.3 — Ataques básicos contra CA y daño.** ✅ **Implementada** (commit `feat: add basic attack resolution`). `1d20 + modificador_ataque` contra CA, igual que D&D: natural 1 falla siempre, natural 20 impacta siempre (daño duplicado en dados, no modificador). Tools `combate.{atacar_enemigo,atacar_personaje}` con eventos `ataque_enemigo_resuelto`/`ataque_personaje_resuelto`. `combate.atacar_enemigo` reutiliza el umbral de estado de `combate.daño_enemigo`; `combate.atacar_personaje` aplica daño directamente sobre `Ficha` vía `GestorEstado` (deliberadamente sin llamar a `hp_xp.aplicar_daño`, para no duplicar evento — ver ADR-0018). Nuevo `ResultadoAtaque` (dataclass interno, no persistido). Ninguna de las dos tools avanza turno automáticamente: el avance sigue siendo explícito vía `combate.avanzar_turno`. `distancia` sigue siendo informativa, no bloquea ataques por alcance. Sin IA enemiga, sin selección automática de acciones.
 
-**Archivos.** `esquemas/combate.py` + `estado/combate.py` + `herramientas/combate.py` ✅ F5.1 (distancias revisadas en F5.1.1, iniciativa/turnos en F5.2).
+**Archivos.** `esquemas/combate.py` + `estado/combate.py` + `herramientas/combate.py` ✅ F5.1 (distancias revisadas en F5.1.1, iniciativa/turnos en F5.2, ataques en F5.3).
 
-**Tests.** `tests/test_combate_narrativo.py`, `tests/test_tools_combate.py` ✅ F5.1 / F5.1.1 / F5.2; `tests/test_iniciativa_turnos.py` ✅ F5.2.
+**Tests.** `tests/test_combate_narrativo.py`, `tests/test_tools_combate.py` ✅ F5.1 / F5.1.1 / F5.2 / F5.3; `tests/test_iniciativa_turnos.py` ✅ F5.2; `tests/test_ataques_combate.py` ✅ F5.3.
 
-**Definición de hecho (F5.1 / F5.1.1 / F5.2).** El agente ya puede gestionar
-combates narrativos mínimos con enemigos simples y daño auditable, con
-vocabulario y distancias alineadas al estilo D&D narrativo sin grid, y ya
-puede **tirar iniciativa clásica y avanzar turnos narrativos** dentro de un
-combate sin grid. Aún no implementa ataques completos con tirada contra CA,
-IA táctica enemiga, reacciones/ataques de oportunidad/flanqueo/cobertura
-mecánicos, áreas de efecto, sorpresa, salvaciones de muerte, resistencias,
-hechizos, balance automático ni XP automática.
+**Definición de hecho (F5.1 / F5.1.1 / F5.2 / F5.3).** El agente ya puede
+gestionar combates narrativos mínimos con enemigos simples y daño auditable,
+con vocabulario y distancias alineadas al estilo D&D narrativo sin grid; ya
+puede **tirar iniciativa clásica y avanzar turnos narrativos**; y ya puede
+**resolver ataques básicos contra CA y aplicar daño** en combate narrativo
+sin grid. Aún no implementa IA enemiga, selección automática de acciones,
+acciones/reacciones completas, reacciones/ataques de oportunidad/flanqueo
+mecánicos, ventaja/desventaja, cobertura mecánica, áreas de efecto,
+sorpresa, salvaciones de muerte, resistencias, hechizos, balance automático
+ni XP automática.
 
-*Pendiente (subfases futuras, sin numerar todavía).* Integración narrativa
-de combate (sugerir/registrar consecuencia al terminar, sin automatizarlo
-demasiado); confirmación de reacciones/ataques de oportunidad propuestos
-(D-COMBATE-04); flanqueo/ventaja-desventaja narrativos aplicados de verdad;
-más adelante, ataques con tirada real y condiciones, si el diseño narrativo
-lo justifica.
+*Pendiente (subfases futuras, sin numerar todavía).* F5.4 — ventaja/
+desventaja y críticos más ricos (muy D&D, no requiere grid). Integración
+narrativa de combate (sugerir/registrar consecuencia al terminar, sin
+automatizarlo demasiado); confirmación de reacciones/ataques de oportunidad
+propuestos (D-COMBATE-04); flanqueo narrativo aplicado de verdad; IA enemiga
+simple; más adelante, condiciones, si el diseño narrativo lo justifica.
 
 ---
 

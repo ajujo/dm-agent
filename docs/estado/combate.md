@@ -1,4 +1,4 @@
-# Combate narrativo mínimo (F5.1, distancias revisadas en F5.1.1, iniciativa y turnos en F5.2)
+# Combate narrativo mínimo (F5.1, distancias en F5.1.1, iniciativa/turnos en F5.2, ataques contra CA en F5.3)
 
 > Módulos: `dm_agent.esquemas.combate` (`EnemigoCombate`, `EntradaIniciativa`,
 > `CombateNarrativo`) · `dm_agent.estado.combate` (`GestorCombateNarrativo`) ·
@@ -42,8 +42,9 @@ aparecen en la ficción.
   o una zona, según la ficción, sin medir conos/radios.
 
 Nada de esto está implementado como mecánica todavía (la iniciativa y los
-turnos sí, desde F5.2; flanqueo/ataques de oportunidad/cobertura/áreas
-siguen pendientes — ver [Pendiente (fases futuras)](#pendiente-fases-futuras)).
+turnos sí, desde F5.2; los ataques básicos contra CA, desde F5.3;
+flanqueo/ataques de oportunidad/cobertura/áreas siguen pendientes — ver
+[Pendiente (fases futuras)](#pendiente-fases-futuras)).
 
 ## Distancias relativas
 
@@ -87,6 +88,44 @@ Las tiradas usan el motor de dados existente
 (`dm_agent.herramientas.dados.tirar`, mismo que `dados.tirar`): en runtime son
 aleatorias de verdad; con `semilla` (parámetro opcional de
 `combate.tirar_iniciativa`) son reproducibles para tests/depuración.
+
+## Ataques básicos contra CA (F5.3)
+
+Un ataque se resuelve igual que en D&D: `1d20 + modificador_ataque` contra la
+`ca` del objetivo.
+
+- **Natural 1**: falla siempre (`pifia=true`), aunque el total alcanzara la CA.
+- **Natural 20**: impacta siempre (`critico=true`), aunque el total no
+  alcanzara la CA. El daño se duplica (dados, no modificador): `1d8+3` se
+  convierte en `2d8+3`.
+- Cualquier otro resultado: impacta si `total_ataque >= ca_objetivo`.
+
+`combate.atacar_enemigo` resuelve un ataque del personaje (o, en teoría,
+cualquier `atacante_id` narrativo) contra un enemigo del combate, aplicando
+daño con la misma lógica de umbral que `combate.daño_enemigo`.
+`combate.atacar_personaje` resuelve un ataque de un enemigo contra el
+personaje jugador, usando `ficha.ca` como objetivo y aplicando el daño
+directamente sobre `Ficha` vía `GestorEstado` — **deliberadamente sin llamar
+a `hp_xp.aplicar_daño`**, para no registrar dos eventos de daño distintos
+para la misma acción (ver [ADR-0018](../decisiones/0018-combate-dnd-narrativo.md)
+para la decisión completa).
+
+Ninguna de las dos tools avanza turno automáticamente: el avance sigue
+siendo una llamada explícita a `combate.avanzar_turno`, decidida por el DM
+(LLM), no un efecto secundario de atacar.
+
+No hay todavía IA enemiga que decida cuándo o a quién atacar, ni selección
+automática de acciones: quien decide que un enemigo ataca (y con qué
+`modificador_ataque`/`dano`) es el DM (LLM) en cada llamada.
+
+### Sobre la distancia y el alcance
+
+La `distancia` de un enemigo (`cuerpo_a_cuerpo`/`corta`/`media`/`larga`/
+`fuera_de_alcance`) **no bloquea** un ataque en F5.3: es solo información
+narrativa para que el DM decida si el ataque tiene sentido en la ficción
+(p. ej. una espada normalmente pide `cuerpo_a_cuerpo`; un arco puede
+funcionar a `media`/`larga`). Validar el alcance de forma dura queda para
+fases futuras, si llega a hacer falta.
 
 ## Esquemas
 
@@ -140,6 +179,19 @@ todavía no se ha tirado. El campo `turno` (F5.1, contador simple) sigue
 existiendo pero no se usa para nada en F5.2: `ronda` e `indice_turno_actual`
 son los campos vivos del ciclo de iniciativa.
 
+### `ResultadoAtaque` (F5.3, no persistido)
+
+```text
+atacante_id, objetivo_id, tirada_d20, modificador_ataque, total_ataque,
+ca_objetivo, impacta, critico, pifia, dano, tipo_dano, motivo
+```
+
+Vive solo en `dm_agent.herramientas.combate` (como `dataclass`, igual que
+`ResultadoTirada` en `herramientas/dados.py`): no es un campo de
+`CombateNarrativo`. El resultado de un ataque se vuelca al evento auditable
+y a la respuesta de la tool; no hace falta guardar un historial de ataques
+dentro del combate para que F5.3 cumpla su objetivo.
+
 ## Persistencia
 
 ```text
@@ -178,10 +230,14 @@ parámetros, eventos y ejemplos.
 
 ## Daño al personaje jugador
 
-El daño/curación del personaje jugador **sigue pasando por `hp_xp.*`**
-(F3.4): `combate.*` solo gestiona el HP de los enemigos simples dentro de la
-escena. No hay XP automática al terminar un combate: usa
-`hp_xp.otorgar_xp` aparte, manualmente.
+El daño/curación del personaje jugador fuera de un ataque resuelto **sigue
+pasando por `hp_xp.*`** (F3.4). Dentro de un ataque resuelto
+(`combate.atacar_personaje`), el daño se aplica directamente sobre `Ficha`
+vía `GestorEstado`, sin pasar por `hp_xp.aplicar_daño` (ver
+[Ataques básicos contra CA](#ataques-básicos-contra-ca-f53) y
+[ADR-0018](../decisiones/0018-combate-dnd-narrativo.md)). No hay XP
+automática al terminar un combate: usa `hp_xp.otorgar_xp` aparte,
+manualmente.
 
 ## Memoria narrativa
 
@@ -192,14 +248,18 @@ quien llama a `narrativa.registrar` o el cierre de sesión/resumen, a mano.
 F5.2 podrá integrar combate con memoria narrativa (p. ej. sugerir una entrada
 de consecuencia al terminar).
 
-## Implementado en F5.2
+## Implementado
 
-- **Iniciativa clásica**: `combate.tirar_iniciativa` (1d20 + mod_destreza,
-  enemigos automáticos).
-- **Turnos narrativos**: `combate.turno_actual` (consulta) y
+- **F5.2 — Iniciativa clásica**: `combate.tirar_iniciativa` (1d20 +
+  mod_destreza, enemigos automáticos).
+- **F5.2 — Turnos narrativos**: `combate.turno_actual` (consulta) y
   `combate.avanzar_turno` (avanza el índice, incrementa `ronda` al cerrar el
   ciclo).
-- Eventos auditables `iniciativa_tirada` y `turno_avanzado`.
+- **F5.3 — Ataques básicos contra CA**: `combate.atacar_enemigo` y
+  `combate.atacar_personaje` (1d20 + modificador contra CA; natural 1/20;
+  daño duplicado en crítico).
+- Eventos auditables `iniciativa_tirada`, `turno_avanzado`,
+  `ataque_enemigo_resuelto`, `ataque_personaje_resuelto`.
 
 ## Pendiente (fases futuras)
 
@@ -212,24 +272,31 @@ ADR-0018):
   aplicarlos** — no se aplican automáticamente.
 - **Flanqueo narrativo**: ver ejemplo en
   [ADR-0018](../decisiones/0018-combate-dnd-narrativo.md).
-- **Ventaja/desventaja narrativa**: aplicada cuando la ficción lo justifique,
-  sin tabla de modificadores tácticos.
-- **Sorpresa**: no implementada en F5.2.
+- **Ventaja/desventaja narrativa**: ver F5.4 propuesta — aplicada cuando la
+  ficción lo justifique, sin tabla de modificadores tácticos.
+- **IA enemiga / selección automática de acciones**: el DM (LLM) sigue
+  decidiendo manualmente cuándo y a quién ataca cada enemigo.
+- **Validación dura de alcance por `distancia`**: en F5.3 la distancia es
+  solo informativa, no bloquea ataques.
+- **Sorpresa**: no implementada.
 - Integración con memoria narrativa al terminar combate (sugerir/registrar
   consecuencia).
 
-## Limitaciones (F5.1 / F5.1.1 / F5.2)
+## Limitaciones (F5.1 / F5.1.1 / F5.2 / F5.3)
 
-- Sin grid, casillas, pies/pulgadas ni reglas de movimiento.
-- Sin ataques completos (sin tirada de ataque/daño con CA todavía), sin IA
-  táctica enemiga, sin economía de acciones completa.
+- Sin grid, casillas, pies/pulgadas ni reglas de movimiento; `distancia` no
+  bloquea ataques por alcance.
+- Sin IA enemiga ni selección automática de acciones; sin economía de
+  acciones completa.
 - Sin reacciones ni ataques de oportunidad **mecánicos** (solo se proponen
   narrativamente y requieren confirmación del jugador en fases futuras).
-- Sin flanqueo ni cobertura mecánicos, sin áreas de efecto.
+- Sin flanqueo ni cobertura mecánicos, sin áreas de efecto, sin
+  ventaja/desventaja.
 - Sin sorpresa, salvaciones de muerte, resistencias, vulnerabilidades ni
   hechizos.
 - Sin XP automática, balance automático ni bestiario completo.
 - Sin RAG, memoria vectorial ni streaming.
 - D17 (D&D 5.5 narrativo en solitario) guiará cualquier adaptación de reglas
   futura; este módulo no implementa reglas adaptadas automáticas más allá de
-  la iniciativa y los turnos, solo el estado mínimo para sostenerlas a mano.
+  la iniciativa, los turnos y los ataques básicos, solo el estado mínimo
+  para sostener el resto a mano.

@@ -14,4 +14,4 @@ Las decisiones aún abiertas viven en [`../DECISIONES_ABIERTAS.md`](../DECISIONE
 | [ADR-0005](./0005-persistencia-inicial.md) | Persistencia inicial | Aceptada | F1.1 |
 | [ADR-0013](./0013-licencia.md) | Licencia del proyecto | Aceptada | F1.1 |
 | [ADR-0017](./0017-dnd55-narrativo-solitario.md) | D&D 5.5 narrativo en solitario / teatro de la mente | Aceptada | F3.2 |
-| [ADR-0018](./0018-combate-dnd-narrativo.md) | Combate D&D narrativo: iniciativa clásica y turnos sin grid | Aceptada | F5.1.1 / F5.2 |
+| [ADR-0018](./0018-combate-dnd-narrativo.md) | Combate D&D narrativo: iniciativa, turnos y ataques básicos sin grid | Aceptada | F5.1.1 / F5.2 / F5.3 |
