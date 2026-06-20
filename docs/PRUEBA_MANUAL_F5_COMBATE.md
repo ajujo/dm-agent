@@ -303,6 +303,13 @@ La prueba se considera válida si, contra un endpoint real:
     modelos pueden simular tools no solo en JSON, sino también con etiquetas
     tipo `<call:name="...">`. Eso tampoco ejecuta herramientas reales. Una
     tool real siempre aparece en debug como `[debug] tool ...` (F6.1.1).
+15. **El agente no ofrece siempre las mismas ~45 tools.** Para mejorar
+    tool-calling en modelos locales, `dm-agent` reduce el conjunto de tools
+    expuestas según la intención del turno (F6.2): un mensaje de ataque solo
+    expone `combate_estado`/`combate_turno_actual`/`combate_atacar_enemigo`/
+    `combate_atacar_personaje`/`combate_registrar_accion_turno`, no las 14
+    tools de combate ni las de ficha/inventario/memoria. En `--debug`, cada
+    turno imprime `[debug] tools expuestas: ...` con la lista real.
 
 ---
 
@@ -335,6 +342,21 @@ La prueba se considera válida si, contra un endpoint real:
   (`_contiene_tool_call_simulada`) también reconoce este patrón y aplica la
   misma política: aviso en `--debug` + reintento automático una sola vez por
   turno con un mensaje correctivo que nombra ambos formatos prohibidos.
+- **Si un modelo simula tool calls** (JSON o XML/pseudo-call, ver los dos
+  casos anteriores), **mira en `--debug` qué tools estaban expuestas** con
+  la línea `[debug] tools expuestas: ...` (F6.2). Si esa lista tiene muchas
+  tools (p. ej. las 14 de combate completas en vez de las 5 relevantes para
+  un ataque), es probable que el modelo se esté "ahogando" en schemas: el
+  filtrado contextual de F6.2 debería haber reducido la lista; si no lo
+  hizo para un mensaje claro, puede faltar una palabra clave en
+  `src/dm_agent/nucleo/seleccion_tools.py` para esa categoría — no es un bug
+  de seguridad (el detector de F6.1/F6.1.1 sigue protegiendo igual), es una
+  oportunidad de ajustar las palabras clave. Algunos modelos o chat
+  templates pueden emitir pseudo tool calls tipo `<tool_call>` incluso con
+  pocas tools expuestas: eso indica un desajuste entre modelo/chat
+  template/parser del servidor (no algo que `dm-agent` pueda corregir desde
+  el cliente). `dm-agent` nunca ejecuta esos textos por seguridad — ver F6.1/
+  F6.1.1 más arriba.
 - **El modelo no llama tools** (solo narra): falta
   `--enable-auto-tool-choice`/`--tool-call-parser` en el servidor, o el
   modelo es demasiado pequeño para tool-calling fiable. Usa un modelo más

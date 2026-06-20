@@ -211,6 +211,49 @@ explícitamente ambos formatos prohibidos (JSON y XML/pseudo-call), y el
 system prompt incluye ambos ejemplos prohibidos. **No añade mecánicas de
 combate ni reglas nuevas.**
 
+---
+
+## F6.2 — Filtrado contextual de tools y diagnóstico de tool-calling
+
+> Igual que F6.1/F6.1.1: no es parte de "Fase 6" de creación de mundo.
+> Corrección de robustez descubierta en una tercera prueba manual real: tras
+> F6.1.1, `ficha_leer`/`combate_estado`/`combate_tirar_iniciativa` ya
+> funcionaban como tool calls reales, pero `combate_atacar_enemigo` seguía
+> fallando como pseudo-call `<tool_call>` incluso pidiéndoselo explícitamente
+> al modelo. Diagnóstico: no es la tool en sí, es disciplina de tool-calling
+> del modelo local degradándose con muchas tools/schemas complejos a la vez.
+
+**Objetivo.** ✅ **Implementada** (commit `fix: filter tools by turn
+context`). Para mejorar la probabilidad de tool calls reales, `dm-agent` ya
+no ofrece siempre las ~45 tools disponibles: filtra el conjunto expuesto al
+LLM según la intención del mensaje del turno. **No añade mecánicas de
+combate ni reglas nuevas; no toca esquemas de combate, lógica de ataque,
+daño, iniciativa, memoria narrativa, RAG ni streaming.**
+
+- **Selector contextual** (`src/dm_agent/nucleo/seleccion_tools.py`, nuevo):
+  `seleccionar_tools_para_turno(mensaje_usuario, historial=None,
+  estado_opcional=None)` reconoce por palabra clave (sin acentos, sin LLM,
+  determinista) siete categorías — ficha, inventario, combate general,
+  ataque, iniciativa/turno, reacción, memoria/sesión — y devuelve el
+  conjunto de nombres API de tools relevante. Las categorías específicas de
+  combate (ataque/iniciativa/reacción) son subconjuntos pequeños que tienen
+  prioridad sobre el conjunto completo de las 14 tools de combate: si
+  alguna coincide, no se cae al conjunto general aunque también coincidan
+  palabras genéricas de combate. Si no se reconoce ninguna categoría,
+  devuelve `None` (fallback seguro: ofrecer todas las tools, el
+  comportamiento anterior a F6.2).
+- **Aplicación en el agent loop** (`src/dm_agent/nucleo/agente.py`):
+  `AgenteDM._tools_para_turno` filtra `RegistroHerramientas.
+  esquemas_disponibles()` con ese conjunto antes de cada turno (estable
+  durante todo el turno, no por iteración). En `--debug` siempre imprime
+  `[debug] tools expuestas: ...` con los nombres reales que se enviaron al
+  LLM, para poder diagnosticar si un modelo sigue simulando tool calls
+  porque ve demasiadas, o porque falta una en la lista filtrada.
+- **No se cambia la política de F6.1/F6.1.1**: el detector de tool calls
+  simuladas y el reintento corrector siguen igual; el filtrado de tools es
+  una capa independiente para reducir la *probabilidad* de que el modelo
+  necesite simular nada, no un sustituto de la disciplina existente.
+
 **Archivos.** `src/dm_agent/prompts/system_dm_minimo.md`,
 `src/dm_agent/nucleo/agente.py`.
 

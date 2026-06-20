@@ -22,6 +22,13 @@ F6.1.1: el mismo problema reaparece en formato XML/pseudo-call (por ejemplo
 `<tool_call>`/`<tool>`. `_contiene_tool_call_simulada` se amplía para
 reconocer también esos formatos, con la misma política: solo detectar y
 avisar/reintentar, nunca parsear ni ejecutar.
+
+F6.2: incluso con esa disciplina, modelos locales con muchas tools y schemas
+complejos a la vez siguen fallando en emitir una tool call real. Antes de
+cada turno, `_tools_para_turno` filtra las tools que se exponen al LLM según
+la intención del mensaje (`seleccion_tools.seleccionar_tools_para_turno`):
+menos tools por turno, más probabilidad de que el modelo elija una real. En
+`--debug` siempre se imprime qué tools quedaron expuestas.
 """
 
 from __future__ import annotations
@@ -33,6 +40,7 @@ from typing import Any
 from dm_agent.herramientas.registro import HerramientaNoRegistrada, RegistroHerramientas
 from dm_agent.llm.cliente import ClienteLLM, ToolCall
 from dm_agent.memoria.contexto import ConstructorContextoMemoria
+from dm_agent.nucleo.seleccion_tools import seleccionar_tools_para_turno
 from dm_agent.persistencia.sesion import Sesion
 
 _PATRON_TOOL_CALL_SIMULADA = re.compile(
@@ -141,12 +149,29 @@ class AgenteDM:
             return (res.datos, True)
         return ({"error": "; ".join(res.errores) or "tool falló"}, False)
 
+    # -- Selección contextual de tools (F6.2) -----------------------------------
+
+    def _tools_para_turno(self, entrada_usuario: str) -> list[dict[str, Any]] | None:
+        """Filtra las tools que se exponen al LLM en este turno según la
+        intención del mensaje (F6.2). Si no hay intención clara, conserva el
+        comportamiento anterior (todas las tools disponibles)."""
+        todas = self.registro.esquemas_disponibles(ctx=None)
+        nombres_relevantes = seleccionar_tools_para_turno(entrada_usuario)
+        if nombres_relevantes is None:
+            seleccionadas = todas
+        else:
+            seleccionadas = [t for t in todas if t["function"]["name"] in nombres_relevantes]
+        if self.debug:
+            nombres = [t["function"]["name"] for t in seleccionadas]
+            print(f"[debug] tools expuestas: {', '.join(nombres) if nombres else '(ninguna)'}")
+        return seleccionadas or None
+
     # -- Turno completo --------------------------------------------------------
 
     def responder(self, entrada_usuario: str) -> str:
         self.sesion.registrar_usuario(entrada_usuario)
         messages = self._messages_base()
-        tools = self.registro.esquemas_disponibles(ctx=None) or None
+        tools = self._tools_para_turno(entrada_usuario)
         reintento_simulada_usado = False
 
         for _ in range(self.max_iter_turno):

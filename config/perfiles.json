@@ -2,13 +2,13 @@
   "version": 1,
   "perfiles": {
     "rapido": {
-      "endpoint": "local_rtx5090",
-      "modelo": "Qwen/Qwen2.5-14B-Instruct",
-      "max_tokens": 800,
-      "temperatura": 0.7,
-      "top_p": 0.9,
-      "uso": "juego en vivo, narrativa breve, combate"
-    },
+     "endpoint": "local_rtx5090",
+     "modelo": "sakamakismile/Qwen3.6-27B-Text-NVFP4-MTP",
+     "max_tokens": 1600,
+     "temperatura": 0.7,
+     "top_p": 0.9,
+     "uso": "juego en vivo, narrativa breve, combate"
+   },
     "grande": {
       "endpoint": "local_mac_studio",
       "modelo": "Qwen2.5-72B-Instruct-Q5_K_M",

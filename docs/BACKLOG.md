@@ -187,6 +187,16 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Decisión técnica.** Misma política que F6.1: detectar y reintentar una vez por turno, nunca parsear/ejecutar el contenido simulado. Se mantuvo el límite de un único reintento automático por turno (no se añadió un segundo nivel de reintento ni una lista extensible de formatos "por si acaso" — solo los formatos observados realmente en pruebas manuales).
 - **P.** P0 (mismo bloqueo que F6.1, otro formato de texto simulado).
 
+## F6.2 — Filtrado contextual de tools y diagnóstico de tool-calling
+
+> Igual que F6.1/F6.1.1: no es parte de "F6 — Creación de mundo" (más abajo).
+
+### #F6.2-01 — Selector contextual de tools por turno — ✅ HECHO (F6.2)
+- **Estado.** Tras F6.1.1, una tercera prueba manual real mostró `ficha_leer`/`combate_estado`/`combate_tirar_iniciativa` funcionando como tool calls reales, pero `combate_atacar_enemigo` seguía fallando como pseudo-call `<tool_call>` incluso pidiéndoselo explícitamente. Diagnóstico: disciplina de tool-calling del modelo local degradándose con muchas tools/schemas a la vez (no un problema de la tool en sí). Corregido con `src/dm_agent/nucleo/seleccion_tools.py` (nuevo): `seleccionar_tools_para_turno` reconoce por palabra clave siete categorías (ficha, inventario, combate general, ataque, iniciativa/turno, reacción, memoria/sesión) y devuelve solo las tools relevantes; `None` si no hay intención clara (fallback: todas las tools, igual que antes de F6.2). `AgenteDM._tools_para_turno` (`src/dm_agent/nucleo/agente.py`) aplica el filtro antes de cada turno y, en `--debug`, imprime `[debug] tools expuestas: ...`. Tests: `tests/test_tool_selection.py`.
+- **Decisión técnica.** Las categorías de combate específicas (ataque/iniciativa/reacción) tienen prioridad sobre el conjunto completo de las 14 tools de combate, aunque también coincidan palabras genéricas de combate en el mismo mensaje (p. ej. "ataca a la rata" coincide con "ataque" y con "combate"/"enemigo", pero solo expone las 5 tools de ataque). La detección ignora acentos (normaliza con NFKD) para no depender de que el modelo o el usuario los escriban bien. No se cambia la política de F6.1/F6.1.1: el filtrado de tools es una capa independiente para reducir la necesidad de simular nada, no un sustituto del detector+reintento existente.
+- **Pendiente:** las palabras clave son las observadas en pruebas manuales reales; si aparece un mensaje claro que no dispara ninguna categoría (y por tanto cae al fallback de "todas las tools"), se añade la palabra que falte en `seleccion_tools.py` en vez de rediseñar el mecanismo.
+- **P.** P0 (bloqueaba `combate_atacar_enemigo` en pruebas manuales reales pese a F6.1.1).
+
 ---
 
 ## F6 — Creación de mundo / campaña / aventura
