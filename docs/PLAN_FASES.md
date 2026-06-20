@@ -355,6 +355,78 @@ forzar desde el cliente.
 
 ---
 
+## F6.5 — Consolidación de ergonomía y robustez de combate
+
+> Igual que F6.1-F6.4: no es parte de "Fase 6" de creación de mundo. Tras
+> una prueba manual de combate completa de extremo a extremo (`tyr` vs.
+> `rata_1`/`rata_2`, terminada con éxito vía `/tool combate_terminar`),
+> aparecieron varias fricciones reales a la vez: placeholders inventados
+> (`campaña_actual`, `combate_actual`, "Tyr" en vez de `tyr`), `/tool`
+> incómodo para operaciones frecuentes, `combate_avanzar_turno` sin saltar
+> enemigos derrotados, ninguna señal de "ya no queda ningún enemigo en
+> pie", y una corrección manual de una acción narrativa mal registrada.
+
+**Objetivo.** ✅ **Implementada** (commit `fix: improve combat repl
+ergonomics`). Cinco mejoras de ergonomía/robustez, ninguna mecánica de D&D
+nueva. **No se tocó** resolución de ataque, daño, tiradas, crítico/pifia,
+inventario, ficha, memoria narrativa, RAG ni streaming.
+
+- **(A) Trim de comandos REPL**: ya estaba resuelto desde F6.4.1
+  (`entrada.strip()` antes de comparar contra cualquier comando); F6.5 lo
+  reconfirma con tests explícitos para `/tool`, `/ayuda` y `/salir` con
+  espacios iniciales.
+- **(B) Contexto operativo activo** (`src/dm_agent/nucleo/
+  contexto_operativo.py`, nuevo): `construir_bloque_contexto_operativo`
+  deriva `campaña_id`/`personaje_id`/`combate_id`/`estado`/`ronda`/`turno
+  actual` reales de `GestorCombateNarrativo.cargar_activo` (sin LLM, sin
+  inventar nada) y los formatea en un bloque "CONTEXTO OPERATIVO ACTUAL"
+  con una prohibición explícita de placeholders. `AgenteDM` lo inyecta como
+  el **último** mensaje `system` antes del historial (después de la
+  memoria narrativa, F4.3, para que pese más), y lo añade también al
+  reintento corrector de F6.3 cuando el usuario pide una tool explícita no
+  ejecutada. Si no hay combate activo, el bloque lo dice explícitamente
+  ("sin combate activo detectado") y no falla.
+- **(C) Comandos cómodos del REPL** (`SesionInteractiva` en `bucle.py`):
+  `/combate`, `/turno`, `/reacciones`, `/ficha`, `/estado` — mismo
+  mecanismo que `/tool` (`dispatch_api` directo, sin LLM), pero resolviendo
+  `campaña_id`/`combate_id`/`personaje_id` solos a partir del combate
+  activo, sin que el usuario tenga que escribir JSON. `/estado` es un
+  resumen compacto y legible (ficha, combate, ronda, enemigos, reacciones
+  pendientes), no JSON bruto. Todos muestran error controlado
+  (`[comando] No hay combate activo detectado.` / `[comando] No se conoce
+  personaje activo...`) si falta el dato; ninguno llama al LLM.
+- **(D) `combate_avanzar_turno` salta enemigos derrotados**
+  (`src/dm_agent/herramientas/combate.py`): nunca deja como turno actual a
+  un enemigo con `estado == "derrotado"` o `hp_actual <= 0` — sigue
+  avanzando hasta el siguiente participante activo (los personajes nunca se
+  saltan). El resultado incluye `enemigos_derrotados_saltados` (ids
+  saltados en esa llamada) y `todos_los_enemigos_derrotados`/
+  `deberia_terminar_combate`.
+- **(E) Señal `todos_los_enemigos_derrotados` en `combate_atacar_enemigo`**:
+  mismos dos campos que en (D), añadidos cuando el ataque deja a todos los
+  enemigos del combate derrotados. **Decisión: solo señaliza, no termina el
+  combate automáticamente** — sigue haciendo falta un `combate_terminar`
+  explícito (D-COMBATE-04), preferencia explícita del encargo sobre
+  cerrar solo "si es sencillo y seguro".
+- **(F) Recomendación de registro narrativo coherente** (documentación, sin
+  código nuevo): registrar la acción narrativa después de ver el resultado
+  real de la tool (`impacta`/`critico`/`pifia`/`dano`), no antes; si se
+  comete un error, registrar una acción nueva de tipo `correccion` en vez
+  de editar la anterior (no hay edición de acciones todavía). Sin comando
+  `/corregir`: explícitamente no necesario en esta fase.
+
+**Archivos.** `src/dm_agent/nucleo/contexto_operativo.py` (nuevo),
+`src/dm_agent/nucleo/agente.py`, `src/dm_agent/nucleo/bucle.py`,
+`src/dm_agent/herramientas/combate.py`.
+
+**Tests.** `tests/test_contexto_operativo.py` (nuevo),
+`tests/test_agent_tool_robustness.py` (ampliado, contexto en el reintento),
+`tests/test_cli.py` (ampliado, comandos cómodos + trim),
+`tests/test_iniciativa_turnos.py` (ampliado, salto de enemigos derrotados),
+`tests/test_ataques_combate.py` (ampliado, señal todos derrotados).
+
+---
+
 ## Fase 6 — Creación de mundo, campaña, aventura
 
 **Objetivo.** Skills `crear-mundo`, `crear-campana`, `crear-aventura`. Migración de `config/tonos/` desde dnd5e.

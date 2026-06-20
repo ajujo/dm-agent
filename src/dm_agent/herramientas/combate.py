@@ -140,6 +140,28 @@ def _estado_tras_daño(hp_actual: int, hp_max: int) -> str:
     return "activo"
 
 
+def _enemigo_derrotado(enemigo: EnemigoCombate) -> bool:
+    """F6.5-D/E: derrotado por estado explícito o por hp_actual<=0 (cubre una
+    corrección manual de hp que no haya actualizado `estado` a la vez)."""
+    return enemigo.estado == "derrotado" or enemigo.hp_actual <= 0
+
+
+def _entrada_es_enemigo_derrotado(combate: CombateNarrativo, entrada: EntradaIniciativa) -> bool:
+    """F6.5-D: True si la entrada de iniciativa es un enemigo y ese enemigo
+    está derrotado. Los personajes nunca se saltan por esta vía (ver F6.5)."""
+    if entrada.tipo != "enemigo":
+        return False
+    enemigo = next((e for e in combate.enemigos if e.id == entrada.participante_id), None)
+    return enemigo is not None and _enemigo_derrotado(enemigo)
+
+
+def _todos_los_enemigos_derrotados(combate: CombateNarrativo) -> bool:
+    """F6.5-E: True si el combate tiene enemigos y todos están derrotados.
+    Solo señaliza (no termina el combate automáticamente: D-COMBATE-04 ya
+    establece que el DM/jugador decide explícitamente)."""
+    return bool(combate.enemigos) and all(_enemigo_derrotado(e) for e in combate.enemigos)
+
+
 def _generar_id_combate() -> str:
     return f"combate_{uuid.uuid4().hex[:8]}"
 
@@ -865,8 +887,8 @@ class _ToolTurnoActual(_ToolCombateBase):
 class _ToolAvanzarTurno(_ToolCombateBase):
     nombre = "combate.avanzar_turno"
     descripcion = (
-        "Avanza al siguiente turno del orden de iniciativa. Si llega al final, vuelve al "
-        "primero y aumenta la ronda. Registra evento turno_avanzado."
+        "Avanza al siguiente turno del orden de iniciativa, saltando enemigos derrotados. Si "
+        "llega al final, vuelve al primero y aumenta la ronda. Registra evento turno_avanzado."
     )
     modifica = ["combate", "eventos"]
     schema: dict[str, Any] = {
@@ -893,12 +915,23 @@ class _ToolAvanzarTurno(_ToolCombateBase):
             )
 
         entrada_anterior = combate.orden_iniciativa[combate.indice_turno_actual]
-        nuevo_indice = combate.indice_turno_actual + 1
+        total_entradas = len(combate.orden_iniciativa)
+        nuevo_indice = combate.indice_turno_actual
         nueva_ronda = combate.ronda
-        if nuevo_indice >= len(combate.orden_iniciativa):
-            nuevo_indice = 0
-            nueva_ronda += 1
-        entrada_actual = combate.orden_iniciativa[nuevo_indice]
+        entrada_actual = entrada_anterior
+        saltados: list[str] = []
+        # F6.5-D: avanza al menos una vez, y sigue saltando enemigos derrotados
+        # (nunca personajes) hasta encontrar uno activo o agotar la vuelta
+        # completa al orden de iniciativa (todos los enemigos derrotados).
+        for _ in range(total_entradas):
+            nuevo_indice += 1
+            if nuevo_indice >= total_entradas:
+                nuevo_indice = 0
+                nueva_ronda += 1
+            entrada_actual = combate.orden_iniciativa[nuevo_indice]
+            if not _entrada_es_enemigo_derrotado(combate, entrada_actual):
+                break
+            saltados.append(entrada_actual.participante_id)
 
         combate_actualizado = combate.model_copy(
             update={"indice_turno_actual": nuevo_indice, "ronda": nueva_ronda}
@@ -921,9 +954,11 @@ class _ToolAvanzarTurno(_ToolCombateBase):
                     "turno_actual": entrada_actual.participante_id,
                     "ronda": nueva_ronda,
                     "motivo": motivo,
+                    "enemigos_derrotados_saltados": saltados,
                 },
             ),
         )
+        todos_derrotados = _todos_los_enemigos_derrotados(combate_actualizado)
         return ResultadoHerramienta(
             ok=True,
             datos={
@@ -931,6 +966,9 @@ class _ToolAvanzarTurno(_ToolCombateBase):
                 "turno_actual": entrada_actual.model_dump(mode="json"),
                 "indice_turno_actual": nuevo_indice,
                 "ronda": nueva_ronda,
+                "enemigos_derrotados_saltados": saltados,
+                "todos_los_enemigos_derrotados": todos_derrotados,
+                "deberia_terminar_combate": todos_derrotados,
                 "combate": combate_actualizado.model_dump(mode="json"),
             },
         )
@@ -1091,6 +1129,7 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
                 },
             ),
         )
+        todos_derrotados = _todos_los_enemigos_derrotados(combate_actualizado)
         return ResultadoHerramienta(
             ok=True,
             datos={
@@ -1113,6 +1152,9 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
                 "hp_despues": hp_despues,
                 "estado": nuevo_estado,
                 "motivo_modificador": motivo_modificador,
+                # F6.5-E: solo señaliza (no termina el combate automáticamente).
+                "todos_los_enemigos_derrotados": todos_derrotados,
+                "deberia_terminar_combate": todos_derrotados,
                 "combate": combate_actualizado.model_dump(mode="json"),
             },
         )

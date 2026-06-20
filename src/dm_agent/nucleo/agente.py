@@ -46,9 +46,11 @@ import json
 import re
 from typing import Any
 
+from dm_agent.estado.combate import GestorCombateNarrativo
 from dm_agent.herramientas.registro import HerramientaNoRegistrada, RegistroHerramientas
 from dm_agent.llm.cliente import ClienteLLM, ToolCall
 from dm_agent.memoria.contexto import ConstructorContextoMemoria
+from dm_agent.nucleo.contexto_operativo import construir_bloque_contexto_operativo
 from dm_agent.nucleo.seleccion_tools import seleccionar_tools_para_turno
 from dm_agent.persistencia.sesion import Sesion
 
@@ -128,6 +130,7 @@ class AgenteDM:
         debug: bool = False,
         constructor_memoria: ConstructorContextoMemoria | None = None,
         campaña_id: str | None = None,
+        gestor_combate: GestorCombateNarrativo | None = None,
     ) -> None:
         self.cliente = cliente
         self.registro = registro
@@ -138,6 +141,8 @@ class AgenteDM:
         # Inyección de memoria narrativa (F4.3): solo si hay constructor y campaña.
         self.constructor_memoria = constructor_memoria
         self.campaña_id = campaña_id
+        # Contexto operativo activo (F6.5-B): solo si hay gestor y campaña.
+        self.gestor_combate = gestor_combate
 
     # -- Construcción de messages ---------------------------------------------
 
@@ -152,6 +157,11 @@ class AgenteDM:
         if bloque_memoria:
             # Segundo mensaje system: continuidad narrativa, sin sustituir el base.
             messages.append({"role": "system", "content": bloque_memoria})
+        bloque_contexto = self._bloque_contexto_operativo()
+        if bloque_contexto:
+            # Último mensaje system (F6.5-B): IDs reales activos, lo más cerca
+            # posible del historial de conversación para que pese más.
+            messages.append({"role": "system", "content": bloque_contexto})
         for ev in self.sesion.historial():
             tipo = ev.get("tipo")
             if tipo == "user":
@@ -167,6 +177,12 @@ class AgenteDM:
         if self.constructor_memoria is None or not self.campaña_id:
             return ""
         return self.constructor_memoria.construir_bloque_memoria(self.campaña_id)
+
+    def _bloque_contexto_operativo(self) -> str:
+        """Bloque de contexto operativo activo (F6.5-B), o "" si no procede."""
+        if self.gestor_combate is None or not self.campaña_id:
+            return ""
+        return construir_bloque_contexto_operativo(self.gestor_combate, self.campaña_id)
 
     # -- Ejecución de una tool call -------------------------------------------
 
@@ -251,15 +267,16 @@ class AgenteDM:
                                 "[debug] tool explícita mencionada pero no ejecutada: "
                                 f"{tool_pendiente}"
                             )
-                        messages.append({"role": "assistant", "content": content})
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": _MENSAJE_TOOL_EXPLICITA_NO_EJECUTADA.format(
-                                    nombre=tool_pendiente
-                                ),
-                            }
+                        mensaje_correctivo = _MENSAJE_TOOL_EXPLICITA_NO_EJECUTADA.format(
+                            nombre=tool_pendiente
                         )
+                        # F6.5-B: el reprompt incluye los IDs reales activos, para
+                        # que el modelo no tenga que inventar/preguntar cuáles son.
+                        bloque_contexto = self._bloque_contexto_operativo()
+                        if bloque_contexto:
+                            mensaje_correctivo = f"{mensaje_correctivo}\n\n{bloque_contexto}"
+                        messages.append({"role": "assistant", "content": content})
+                        messages.append({"role": "user", "content": mensaje_correctivo})
                         continue
                     mensaje_final = (
                         f"No se ha podido ejecutar la herramienta solicitada: {tool_pendiente}."

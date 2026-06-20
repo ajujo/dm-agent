@@ -17,6 +17,7 @@ from dm_agent.herramientas.registro import RegistroHerramientas
 CAMP = "campana_demo"
 
 _ENEMIGO_RATA = {"id": "rata_1", "nombre": "Rata gigante", "hp_max": 7, "hp_actual": 7, "ca": 12}
+_ENEMIGO_RATA_2 = {"id": "rata_2", "nombre": "Rata gigante 2", "hp_max": 7, "hp_actual": 7, "ca": 12}
 
 
 @pytest.fixture
@@ -58,6 +59,17 @@ def _tirar_iniciativa(reg, combate_id, **kwargs):
     }
     args.update(kwargs)
     return reg.dispatch("combate.tirar_iniciativa", ctx=None, **args)
+
+
+def _dano_enemigo(reg, combate_id, enemigo_id, cantidad):
+    return reg.dispatch(
+        "combate.daño_enemigo",
+        ctx=None,
+        campaña_id=CAMP,
+        combate_id=combate_id,
+        enemigo_id=enemigo_id,
+        cantidad=cantidad,
+    )
 
 
 def test_tirar_iniciativa_crea_orden(entorno, monkeypatch):
@@ -217,6 +229,77 @@ def test_tirar_iniciativa_rechaza_personaje_id_distinto(entorno, monkeypatch):
 
     res = _tirar_iniciativa(reg, combate_id, personaje={"id": "otro_pj"})
     assert res.ok is False
+
+
+# --- F6.5-D: avanzar_turno salta enemigos derrotados ------------------------
+
+
+def test_avanzar_turno_salta_enemigo_derrotado(entorno, monkeypatch):
+    reg, _, _ = entorno
+    combate_id = _iniciar(reg, enemigos=[_ENEMIGO_RATA, _ENEMIGO_RATA_2]).datos["combate"]["id"]
+    _mock_tirar_d20(monkeypatch, [15, 10, 5])  # orden: pj_tyr, rata_1, rata_2
+    _tirar_iniciativa(reg, combate_id)
+    _dano_enemigo(reg, combate_id, "rata_1", 7)  # derrota a rata_1 (hp_max=7)
+
+    res = reg.dispatch("combate.avanzar_turno", ctx=None, campaña_id=CAMP, combate_id=combate_id)
+    assert res.ok
+    assert res.datos["turno_actual"]["participante_id"] == "rata_2"
+    assert res.datos["enemigos_derrotados_saltados"] == ["rata_1"]
+    assert res.datos["todos_los_enemigos_derrotados"] is False
+
+
+def test_avanzar_turno_llega_a_enemigo_activo_tras_varios_derrotados(entorno, monkeypatch):
+    reg, _, _ = entorno
+    rata_3 = {**_ENEMIGO_RATA, "id": "rata_3", "nombre": "Rata gigante 3"}
+    combate_id = _iniciar(
+        reg, enemigos=[_ENEMIGO_RATA, _ENEMIGO_RATA_2, rata_3]
+    ).datos["combate"]["id"]
+    _mock_tirar_d20(monkeypatch, [15, 10, 8, 5])  # orden: pj_tyr, rata_1, rata_2, rata_3
+    _tirar_iniciativa(reg, combate_id)
+    _dano_enemigo(reg, combate_id, "rata_1", 7)
+    _dano_enemigo(reg, combate_id, "rata_2", 7)
+
+    res = reg.dispatch("combate.avanzar_turno", ctx=None, campaña_id=CAMP, combate_id=combate_id)
+    assert res.ok
+    assert res.datos["turno_actual"]["participante_id"] == "rata_3"
+    assert res.datos["enemigos_derrotados_saltados"] == ["rata_1", "rata_2"]
+    assert res.datos["ronda"] == 1
+    assert res.datos["todos_los_enemigos_derrotados"] is False
+
+
+def test_avanzar_turno_todos_enemigos_derrotados_vuelve_a_personaje_y_avanza_ronda(
+    entorno, monkeypatch
+):
+    reg, _, _ = entorno
+    combate_id = _iniciar(reg, enemigos=[_ENEMIGO_RATA, _ENEMIGO_RATA_2]).datos["combate"]["id"]
+    _mock_tirar_d20(monkeypatch, [15, 10, 5])
+    _tirar_iniciativa(reg, combate_id)
+    _dano_enemigo(reg, combate_id, "rata_1", 7)
+    _dano_enemigo(reg, combate_id, "rata_2", 7)
+
+    res = reg.dispatch("combate.avanzar_turno", ctx=None, campaña_id=CAMP, combate_id=combate_id)
+    assert res.ok
+    # No se queda atascado en un enemigo derrotado: vuelve al personaje.
+    assert res.datos["turno_actual"]["participante_id"] == "pj_tyr"
+    assert res.datos["ronda"] == 2
+    assert res.datos["enemigos_derrotados_saltados"] == ["rata_1", "rata_2"]
+    assert res.datos["todos_los_enemigos_derrotados"] is True
+    assert res.datos["deberia_terminar_combate"] is True
+
+
+def test_avanzar_turno_sin_enemigos_derrotados_no_cambia_comportamiento(entorno, monkeypatch):
+    """No regresión: con todos los enemigos activos, el avance es el de
+    siempre (F5.2), sin saltos ni señal de combate terminado."""
+    reg, _, _ = entorno
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    _mock_tirar_d20(monkeypatch, [15, 8])
+    _tirar_iniciativa(reg, combate_id)
+
+    res = reg.dispatch("combate.avanzar_turno", ctx=None, campaña_id=CAMP, combate_id=combate_id)
+    assert res.ok
+    assert res.datos["turno_actual"]["participante_id"] == "rata_1"
+    assert res.datos["enemigos_derrotados_saltados"] == []
+    assert res.datos["todos_los_enemigos_derrotados"] is False
 
 
 def test_semilla_es_reproducible(entorno):

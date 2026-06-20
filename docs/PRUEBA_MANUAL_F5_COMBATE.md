@@ -327,6 +327,20 @@ La prueba se considera válida si, contra un endpoint real:
     verdad**, `dm-agent` reintenta una vez con un mensaje corrector (F6.3); si
     tras el reintento sigue sin llamarla, responde que no se pudo ejecutar
     esa herramienta, sin afirmar que sí se hizo.
+19. **El modelo ve un bloque "CONTEXTO OPERATIVO ACTUAL" con los IDs reales**
+    (F6.5, ver sección 11 más abajo) y no debería usar placeholders como
+    `campaña_actual`/`combate_actual`/`personaje_actual`/"Tyr" cuando el ID
+    real es `tyr`.
+20. **`combate_avanzar_turno` salta enemigos derrotados** (F6.5): si el
+    siguiente en el orden de iniciativa es un enemigo con `estado ==
+    "derrotado"` o `hp_actual <= 0`, no se queda ahí — avanza hasta el
+    siguiente participante activo (nunca salta al personaje). Si ya no
+    queda ningún enemigo activo, el resultado trae
+    `todos_los_enemigos_derrotados: true` (solo señal, no cierra el combate
+    solo).
+21. Hay comandos cómodos sin LLM para consultar combate/turno/reacciones/
+    ficha/estado activos sin escribir JSON: `/combate`, `/turno`,
+    `/reacciones`, `/ficha`, `/estado` (F6.5, ver sección 11).
 
 ---
 
@@ -496,6 +510,124 @@ Notas:
 - `/tool` solo se ejecuta cuando el usuario lo escribe explícitamente; no
   tiene relación con la detección de pseudo-calls de F6.1/F6.1.1 (que sigue
   sin parsear ni ejecutar nunca el texto que escribe el modelo).
+
+---
+
+## 11. Contexto operativo activo y comandos cómodos (F6.5)
+
+Tras una prueba manual completa de combate, aparecieron tres fricciones más:
+el modelo inventaba placeholders (`campaña_actual`, `combate_actual`, "Tyr"
+en vez de `tyr`) en lugar de usar los IDs reales aunque ya estaban
+disponibles; `/tool` era incómodo para operaciones frecuentes (hay que
+escribir el JSON entero a mano); y al avanzar turno o atacar, nada avisaba
+de que todos los enemigos ya estaban derrotados. F6.5 corrige las tres sin
+añadir mecánicas nuevas de D&D.
+
+### Contexto operativo activo (sin placeholders)
+
+Antes de cada turno, `dm-agent` inyecta un mensaje `system` adicional con
+los IDs reales de la campaña/combate/personaje activos, derivados de los
+gestores existentes (sin LLM):
+
+```text
+CONTEXTO OPERATIVO ACTUAL
+
+- campaña_id activa: campana_tyr
+- personaje_id activo: tyr
+- combate_id activo: combate_aa6049b2
+- estado combate: activo
+- ronda: 3
+- turno actual: tyr
+
+Usa estos IDs reales en las herramientas.
+No uses placeholders como campaña_actual, combate_actual, personaje_actual o Tyr si el ID real es tyr.
+```
+
+Si no hay combate activo, el bloque de combate se omite y dice
+explícitamente "sin combate activo detectado" — nunca falla ni inventa un
+`combate_id`. Este mismo bloque se añade también al reintento corrector de
+F6.3 cuando el usuario pide una tool explícita y el modelo no la llama: así
+el segundo intento ya tiene los IDs reales delante, no solo el nombre de la
+tool.
+
+### Comandos cómodos: `/combate`, `/turno`, `/reacciones`, `/ficha`, `/estado`
+
+Atajos sobre el mismo mecanismo que `/tool` (`dispatch_api` directo, sin
+LLM), pero sin tener que escribir `campaña_id`/`combate_id`/`personaje_id` a
+mano: resuelven esos IDs solos a partir del combate activo de la campaña.
+
+```text
+> /combate
+[comando] combate_estado -> ok=True
+{ ... }
+
+> /turno
+[comando] combate_turno_actual -> ok=True
+{ ... }
+
+> /reacciones
+[comando] combate_listar_reacciones -> ok=True
+{ ... }
+
+> /ficha
+[comando] ficha_leer -> ok=True
+{ ... }
+
+> /estado
+[estado]
+Campaña: campana_tyr
+Personaje: Tyr (tyr) — HP 1/12, CA 16
+Combate: combate_aa6049b2 — terminado
+Ronda: 3
+Enemigos:
+- rata_1: derrotado, 0/5 HP
+- rata_2: derrotado, 0/5 HP
+Reacciones pendientes: 0
+```
+
+Si no hay combate activo, `/combate`, `/turno` y `/reacciones` muestran
+`[comando] No hay combate activo detectado.` en vez de fallar; `/ficha` sin
+personaje activo conocido muestra
+`[comando] No se conoce personaje activo. Usa /tool ficha_leer {...}`.
+`/estado` nunca rompe: si falta combate o ficha, lo dice en el propio
+resumen. Ninguno de estos comandos llama al LLM.
+
+### Avanzar turno salta enemigos derrotados
+
+`combate_avanzar_turno` ya no deja como turno activo a un enemigo derrotado
+(`estado == "derrotado"` o `hp_actual <= 0`): lo salta automáticamente y
+sigue hasta el siguiente participante activo. Los personajes nunca se
+saltan por esta vía. El resultado incluye `enemigos_derrotados_saltados`
+(lista de ids saltados en esa llamada) y `todos_los_enemigos_derrotados`/
+`deberia_terminar_combate` (`true` si ya no queda ningún enemigo activo) —
+**solo señaliza, no termina el combate solo**: sigue haciendo falta un
+`combate_terminar` explícito (D-COMBATE-04).
+
+### Señal `todos_los_enemigos_derrotados` al atacar
+
+`combate_atacar_enemigo` añade los mismos dos campos
+(`todos_los_enemigos_derrotados`, `deberia_terminar_combate`) cuando el
+ataque deja a todos los enemigos del combate derrotados. Sigue sin terminar
+el combate automáticamente: es una señal para que el DM (humano o LLM) sepa
+que toca llamar a `combate_terminar` si quiere cerrar la escena.
+
+### Recomendación: registrar la acción narrativa después de ver el resultado real
+
+Durante la prueba apareció una rata que hizo un crítico, pero la acción
+narrativa se registró como "falló" antes de comprobar `impacta`/`critico`
+en el resultado real de la tool — hubo que corregirlo a mano después.
+Recomendación para evitarlo:
+
+- **Registra la acción (`combate_registrar_accion_turno`) después de ver el
+  resultado real del ataque**, no antes ni en paralelo: lee `impacta`,
+  `critico`, `pifia` y `dano` de la respuesta de `combate_atacar_enemigo`/
+  `combate_atacar_personaje` antes de describir qué pasó.
+- **No escribas "falló" (ni "impactó", ni "crítico") antes de comprobar
+  `impacta`** en el resultado: la narración debe seguir a la mecánica, no
+  adelantarse a ella.
+- Si aun así se registra una acción incorrecta, **no la edites**: registra
+  una acción nueva de tipo `correccion` que la corrija explícitamente (no
+  hay edición de acciones todavía; ver `docs/BACKLOG.md`).
 
 ---
 

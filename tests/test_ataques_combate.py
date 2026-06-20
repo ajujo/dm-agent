@@ -130,6 +130,70 @@ def test_ataque_enemigo_falla_si_total_menor_que_ca(entorno, monkeypatch):
     assert res.datos["hp_despues"] == res.datos["hp_antes"]
 
 
+# --- F6.5-E: señal todos_los_enemigos_derrotados / deberia_terminar_combate ---------------
+
+
+def test_ataque_que_derrota_al_unico_enemigo_señala_todos_derrotados(entorno, monkeypatch):
+    reg, _, _, _ = entorno
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    _mock_tiradas(monkeypatch, 10)  # impacta
+    _mock_dano(monkeypatch, 7)  # hp_max=7 -> hp_despues=0
+
+    res = _atacar_enemigo(reg, combate_id)
+    assert res.ok
+    assert res.datos["hp_despues"] == 0
+    assert res.datos["estado"] == "derrotado"
+    assert res.datos["todos_los_enemigos_derrotados"] is True
+    assert res.datos["deberia_terminar_combate"] is True
+
+
+def test_ataque_que_no_derrota_al_ultimo_enemigo_no_señala_todos_derrotados(entorno, monkeypatch):
+    reg, _, _, _ = entorno
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    _mock_tiradas(monkeypatch, 10)  # impacta
+    _mock_dano(monkeypatch, 2)  # hp_max=7 -> hp_despues=5, sigue activo
+
+    res = _atacar_enemigo(reg, combate_id)
+    assert res.ok
+    assert res.datos["hp_despues"] == 5
+    assert res.datos["todos_los_enemigos_derrotados"] is False
+    assert res.datos["deberia_terminar_combate"] is False
+
+
+def test_ataque_con_otro_enemigo_activo_no_señala_todos_derrotados(entorno, monkeypatch):
+    reg, _, _, _ = entorno
+    rata_2 = {**_ENEMIGO_RATA, "id": "rata_2", "nombre": "Rata gigante 2"}
+    combate_id = _iniciar(reg, enemigos=[_ENEMIGO_RATA, rata_2]).datos["combate"]["id"]
+    _mock_tiradas(monkeypatch, 10)
+    _mock_dano(monkeypatch, 7)  # derrota a rata_1; rata_2 sigue activa
+
+    res = _atacar_enemigo(reg, combate_id)
+    assert res.ok
+    assert res.datos["estado"] == "derrotado"
+    assert res.datos["todos_los_enemigos_derrotados"] is False
+    assert res.datos["deberia_terminar_combate"] is False
+
+
+def test_ataque_no_rompe_campos_existentes_del_resultado(entorno, monkeypatch):
+    """No regresión: los campos de F5.3/F5.4 siguen presentes junto a los
+    nuevos de F6.5-E."""
+    reg, _, _, _ = entorno
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    _mock_tiradas(monkeypatch, 10)
+    _mock_dano(monkeypatch, 4)
+
+    res = _atacar_enemigo(reg, combate_id)
+    assert res.ok
+    campos_previos = [
+        "impacta", "critico", "pifia", "dano", "tipo_dano",
+        "hp_antes", "hp_despues", "estado", "combate",
+    ]
+    for campo in campos_previos:
+        assert campo in res.datos
+    assert "todos_los_enemigos_derrotados" in res.datos
+    assert "deberia_terminar_combate" in res.datos
+
+
 def test_ataque_enemigo_natural_1_falla_aunque_total_alcance_ca(entorno, monkeypatch):
     reg, _, _, _ = entorno
     combate_id = _iniciar(reg).datos["combate"]["id"]

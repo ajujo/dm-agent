@@ -226,6 +226,44 @@ def test_mensaje_con_tool_explicita_no_ejecutada_activa_reintento(tmp_path):
     )
 
 
+def test_reintento_tool_explicita_incluye_contexto_operativo_activo(tmp_path):
+    """F6.5-B: el reprompt de tool explícita no ejecutada debe incluir los
+    IDs reales activos (campaña/combate), no solo el nombre de la tool."""
+    from dm_agent.esquemas.combate import CombateNarrativo
+    from dm_agent.estado.combate import GestorCombateNarrativo
+
+    registro, _tools = _registro("combate.resolver_reaccion")
+    gestor_combate = GestorCombateNarrativo(tmp_path / "storage")
+    combate = CombateNarrativo(id="combate_aa6049b2", campaña_id="campana_tyr", personaje_id="tyr")
+    gestor_combate.guardar(combate)
+    gestor_combate.marcar_activo(combate)
+
+    cliente = _ClienteSecuencia(
+        [
+            _resp(content=""),
+            _resp(content="Vale, lo confirmo."),
+        ]
+    )
+    sesion = Sesion.crear(tmp_path / "sesiones", id="s7b")
+    agente = AgenteDM(
+        cliente,
+        registro,
+        sesion,
+        system_prompt="SYSTEM-BASE-DM",
+        campaña_id="campana_tyr",
+        gestor_combate=gestor_combate,
+    )
+
+    agente.responder("Usa combate_resolver_reaccion para confirmar reaccion_f8b95457.")
+
+    segunda_llamada = cliente.llamadas[1]
+    # El reintento es el último turno `user` sintético añadido (el primero es
+    # la entrada original del usuario, que no menciona el combate_id).
+    mensaje_reintento = [m for m in segunda_llamada if m["role"] == "user"][-1]["content"]
+    assert "combate_aa6049b2" in mensaje_reintento
+    assert "campana_tyr" in mensaje_reintento
+
+
 def test_tool_explicita_no_ejecutada_tras_reintento_responde_mensaje_seguro(tmp_path):
     registro, tools = _registro("combate.resolver_reaccion")
     cliente = _ClienteSecuencia(

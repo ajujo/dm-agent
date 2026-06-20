@@ -223,6 +223,31 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Decisión técnica.** `/tool` es estrictamente un comando manual disparado por el usuario; no tiene ninguna relación con la detección de pseudo-calls (F6.1/F6.1.1) ni con el reintento de F6.3 — nunca parsea ni ejecuta texto que haya escrito el modelo, solo lo que el usuario escribe explícitamente tras `/tool`.
 - **P.** P1 (mejora de robustez/recuperación; no bloqueaba el uso del agente, pero limitaba la prueba manual cuando un modelo concreto se resistía a una tool).
 
+## F6.5 — Consolidación de ergonomía y robustez de combate
+
+> Igual que F6.1-F6.4: no es parte de "F6 — Creación de mundo" (más abajo). Cierra una prueba manual de combate completa de extremo a extremo (`tyr` vs. `rata_1`/`rata_2`, terminada con `/tool combate_terminar`) que reveló varias fricciones reales a la vez.
+
+### #F6.5-01 — Contexto operativo activo (prohibición de placeholders) — ✅ HECHO (F6.5)
+- **Estado.** El modelo usaba placeholders incorrectos (`campaña_actual`, `combate_actual`, "Tyr" en vez de `tyr`) en lugar de los IDs reales, aunque ya estaban disponibles sin preguntar. Corregido con `src/dm_agent/nucleo/contexto_operativo.py` (nuevo): `construir_bloque_contexto_operativo` deriva los IDs reales (`campaña_id`/`personaje_id`/`combate_id`/`estado`/`ronda`/`turno actual`) de `GestorCombateNarrativo.cargar_activo`, sin LLM. `AgenteDM` lo inyecta como el último mensaje `system` antes del historial (después de la memoria narrativa, para que pese más) y lo añade también al reintento corrector de F6.3. Si no hay combate activo, lo dice explícitamente sin fallar. Tests: `tests/test_contexto_operativo.py`, `tests/test_agent_tool_robustness.py`.
+- **P.** P0 (el modelo no podía operar de forma fiable sin los IDs reales).
+
+### #F6.5-02 — Comandos cómodos `/combate` `/turno` `/reacciones` `/ficha` `/estado` — ✅ HECHO (F6.5)
+- **Estado.** `/tool` (F6.4) es potente pero incómodo para operaciones frecuentes (JSON largo a mano). Añadidos cinco atajos en `SesionInteractiva` (`src/dm_agent/nucleo/bucle.py`) que reutilizan el mismo mecanismo (`dispatch_api` directo, sin LLM) pero resuelven los IDs solos a partir del combate activo. `/estado` es un resumen compacto y legible (no JSON bruto). Todos muestran error controlado si falta combate/personaje activo; ninguno llama al LLM. Aparecen en `/ayuda`. Tests: `tests/test_cli.py`.
+- **P.** P1 (ergonomía; no bloqueaba el uso, pero hacía la prueba manual tediosa).
+
+### #F6.5-03 — `combate_avanzar_turno` salta enemigos derrotados — ✅ HECHO (F6.5)
+- **Estado.** El avance de turno dejaba como turno activo a enemigos ya derrotados. Corregido en `_ToolAvanzarTurno.ejecutar` (`src/dm_agent/herramientas/combate.py`): salta participantes `enemigo` con `estado == "derrotado"` o `hp_actual <= 0` (nunca personajes), acotado a `len(orden_iniciativa)` iteraciones para no bucle-infinito. El resultado incluye `enemigos_derrotados_saltados` y `todos_los_enemigos_derrotados`/`deberia_terminar_combate`. Tests: `tests/test_iniciativa_turnos.py`.
+- **P.** P1 (no bloqueaba, pero obligaba a avances de turno manuales repetidos sobre enemigos ya derrotados).
+
+### #F6.5-04 — Señal `todos_los_enemigos_derrotados` al atacar — ✅ HECHO (F6.5)
+- **Estado.** Nada avisaba de que un ataque había dejado a todos los enemigos derrotados. `combate_atacar_enemigo` añade `todos_los_enemigos_derrotados`/`deberia_terminar_combate` (mismos campos que #F6.5-03) cuando corresponde. **Decisión: solo señaliza, no termina el combate automáticamente** (preferencia explícita del encargo: D-COMBATE-04 ya exige confirmación explícita del jugador/DM para terminar combate). Tests: `tests/test_ataques_combate.py`.
+- **P.** P2 (conveniencia; el combate se podía terminar manualmente sin esta señal, como ya ocurrió en la prueba real).
+
+### #F6.5-05 — Recomendación: registrar la acción narrativa tras ver el resultado real — ✅ HECHO (F6.5, documentación)
+- **Estado.** Se registró una acción narrativa como "falló" antes de comprobar `impacta` en el resultado real (una rata hizo crítico); hubo que corregir a mano. No se implementó edición de acciones ni un comando `/corregir` (explícitamente no necesario en esta fase): se documentó la recomendación en `docs/PRUEBA_MANUAL_F5_COMBATE.md` (sección 11) — registrar después de ver el resultado real, no antes; si se comete un error, registrar una acción nueva de tipo `correccion` en vez de editar la anterior.
+- **Pendiente:** edición/corrección estructurada de `AccionTurno` (tipo `correccion` como convención documentada, no como campo validado) y comando `/corregir`, si en el futuro la fricción lo justifica.
+- **P.** P2.
+
 ---
 
 ## F6 — Creación de mundo / campaña / aventura

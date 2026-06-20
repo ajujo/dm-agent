@@ -11,6 +11,13 @@ recuperación manual para cuando un modelo local no emite una tool call real
 aunque la tool esté disponible (ver F6.1-F6.3): el usuario puede forzar la
 ejecución él mismo. No se añade al historial conversacional del LLM (no
 pasa por `Sesion.registrar_usuario`/`registrar_asistente`).
+
+F6.5-C: `/tool` es potente pero incómodo para operaciones frecuentes (hay
+que escribir el JSON entero a mano). `/combate`, `/turno`, `/reacciones`,
+`/ficha` y `/estado` son atajos sobre el mismo mecanismo (`dispatch_api`
+directo, sin LLM): resuelven `campaña_id`/`combate_id`/`personaje_id` solos
+a partir del combate activo de la campaña (mismo origen que el contexto
+operativo de F6.5-B), así que no hace falta escribir esos IDs cada vez.
 """
 
 from __future__ import annotations
@@ -20,6 +27,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from dm_agent.esquemas.combate import CombateNarrativo
 from dm_agent.estado.combate import GestorCombateNarrativo
 from dm_agent.estado.eventos import RegistroEventosEstado
 from dm_agent.estado.gestor import GestorEstado
@@ -55,6 +63,11 @@ COMANDOS = {
     "/cerrar": "cierra la sesión: resumen + preparación de la próxima",
     "/debug": "activa/desactiva la traza de depuración",
     "/tool": "ejecuta una tool real sin pasar por el LLM: /tool <nombre_tool_api> <json>",
+    "/combate": "estado del combate activo (sin LLM)",
+    "/turno": "turno actual del combate activo (sin LLM)",
+    "/reacciones": "reacciones del combate activo (sin LLM)",
+    "/ficha": "ficha del personaje activo (sin LLM)",
+    "/estado": "resumen compacto: ficha, combate, turno, enemigos, reacciones (sin LLM)",
 }
 
 
@@ -220,6 +233,7 @@ class SesionInteractiva:
             debug=self.debug,
             constructor_memoria=self.constructor_memoria,
             campaña_id=self.campaña_id,
+            gestor_combate=self.combate,
         )
 
     def nueva_sesion(self) -> str:
@@ -277,34 +291,139 @@ class SesionInteractiva:
             f"== Punto de arranque de la próxima ==\n{entradas['preparacion'].contenido}"
         )
 
-    def ejecutar_tool_manual(self, linea: str) -> str:
-        """Comando `/tool` (F6.4): ejecuta una tool real directamente, sin
-        pasar por el LLM. Depuración/recuperación manual cuando el modelo no
-        emite una tool call real aunque la tool exista. No toca `Sesion`
-        como turno conversacional (no se reinyecta al LLM); solo registra
-        `tool_call`/`tool_result` para el mismo rastro de auditoría que dejan
-        las tools llamadas por el LLM."""
-        try:
-            nombre_api, argumentos = parsear_comando_tool(linea)
-        except ErrorComandoTool as e:
-            return f"[tool] error: {e}"
-
+    def _dispatch_y_formatear(
+        self, nombre_api: str, argumentos: dict[str, Any], *, prefijo: str = "tool"
+    ) -> str:
+        """Despacha una tool real (`dispatch_api`) y formatea el resultado de
+        forma legible. Compartido por `/tool` (F6.4) y los comandos cómodos
+        `/combate`/`/turno`/`/reacciones`/`/ficha` (F6.5-C). Registra
+        `tool_call`/`tool_result` en `Sesion` para auditoría, pero **no**
+        como turno `user`/`assistant`: no entra en el historial conversacional
+        que `AgenteDM` reinyecta al LLM."""
         try:
             self.registro.nombre_api_a_interno(nombre_api)
         except HerramientaNoRegistrada:
-            return f"[tool] {nombre_api} -> error: herramienta desconocida"
+            return f"[{prefijo}] {nombre_api} -> error: herramienta desconocida"
 
         try:
             resultado = self.registro.dispatch_api(nombre_api, ctx=None, **argumentos)
         except TypeError as e:
-            return f"[tool] {nombre_api} -> error: argumentos inválidos: {e}"
+            return f"[{prefijo}] {nombre_api} -> error: argumentos inválidos: {e}"
 
         datos = resultado.datos if resultado.ok else {"error": "; ".join(resultado.errores)}
         if self.sesion is not None:
             self.sesion.registrar_tool_call(nombre_api, argumentos)
             self.sesion.registrar_tool_result(nombre_api, datos, ok=resultado.ok)
         cuerpo = json.dumps(datos, ensure_ascii=False, indent=2)
-        return f"[tool] {nombre_api} -> ok={resultado.ok}\n{cuerpo}"
+        return f"[{prefijo}] {nombre_api} -> ok={resultado.ok}\n{cuerpo}"
+
+    def ejecutar_tool_manual(self, linea: str) -> str:
+        """Comando `/tool` (F6.4): ejecuta una tool real directamente, sin
+        pasar por el LLM. Depuración/recuperación manual cuando el modelo no
+        emite una tool call real aunque la tool exista."""
+        try:
+            nombre_api, argumentos = parsear_comando_tool(linea)
+        except ErrorComandoTool as e:
+            return f"[tool] error: {e}"
+        return self._dispatch_y_formatear(nombre_api, argumentos, prefijo="tool")
+
+    def _combate_activo(self) -> CombateNarrativo | None:
+        """Combate activo de la campaña activa, o `None` si no hay ninguno
+        (F6.5-B/C): mismo origen que el contexto operativo inyectado al LLM."""
+        return self.combate.cargar_activo(self.campaña_id)
+
+    def comando_combate(self) -> str:
+        """Comando `/combate` (F6.5-C): estado del combate activo, sin
+        necesidad de escribir `campaña_id`/`combate_id` a mano."""
+        combate = self._combate_activo()
+        if combate is None:
+            return "[comando] No hay combate activo detectado."
+        return self._dispatch_y_formatear(
+            "combate_estado",
+            {"campaña_id": self.campaña_id, "combate_id": combate.id},
+            prefijo="comando",
+        )
+
+    def comando_turno(self) -> str:
+        """Comando `/turno` (F6.5-C): turno actual del combate activo."""
+        combate = self._combate_activo()
+        if combate is None:
+            return "[comando] No hay combate activo detectado."
+        return self._dispatch_y_formatear(
+            "combate_turno_actual",
+            {"campaña_id": self.campaña_id, "combate_id": combate.id},
+            prefijo="comando",
+        )
+
+    def comando_reacciones(self) -> str:
+        """Comando `/reacciones` (F6.5-C): reacciones del combate activo."""
+        combate = self._combate_activo()
+        if combate is None:
+            return "[comando] No hay combate activo detectado."
+        return self._dispatch_y_formatear(
+            "combate_listar_reacciones",
+            {"campaña_id": self.campaña_id, "combate_id": combate.id},
+            prefijo="comando",
+        )
+
+    def comando_ficha(self) -> str:
+        """Comando `/ficha` (F6.5-C): ficha del personaje activo. Sin un
+        mecanismo formal de "personaje activo", se usa el `personaje_id` del
+        combate activo (igual que el contexto operativo de F6.5-B)."""
+        combate = self._combate_activo()
+        personaje_id = combate.personaje_id if combate is not None else None
+        if not personaje_id:
+            return "[comando] No se conoce personaje activo. Usa /tool ficha_leer {...}"
+        return self._dispatch_y_formatear(
+            "ficha_leer",
+            {"campaña_id": self.campaña_id, "personaje_id": personaje_id},
+            prefijo="comando",
+        )
+
+    def comando_estado(self) -> str:
+        """Comando `/estado` (F6.5-C): resumen compacto y legible (no JSON
+        bruto) combinando ficha, combate, turno, enemigos y reacciones
+        pendientes. No llama al LLM."""
+        combate = self._combate_activo()
+        lineas = [f"Campaña: {self.campaña_id}"]
+
+        personaje_id = combate.personaje_id if combate is not None else None
+        if personaje_id:
+            try:
+                resultado = self.registro.dispatch_api(
+                    "ficha_leer", ctx=None, campaña_id=self.campaña_id, personaje_id=personaje_id
+                )
+            except HerramientaNoRegistrada:
+                lineas.append(f"Personaje: {personaje_id} (tool ficha_leer no disponible)")
+            else:
+                if resultado.ok:
+                    ficha = resultado.datos.get("ficha", {})
+                    nombre = ficha.get("nombre", personaje_id)
+                    lineas.append(
+                        f"Personaje: {nombre} ({personaje_id}) — "
+                        f"HP {ficha.get('hp_actual', '?')}/{ficha.get('hp_max', '?')}, "
+                        f"CA {ficha.get('ca', '?')}"
+                    )
+                else:
+                    lineas.append(f"Personaje: {personaje_id} (no se pudo leer la ficha)")
+        else:
+            lineas.append("Personaje: desconocido")
+
+        if combate is None:
+            lineas.append("Combate: sin combate activo detectado")
+            return "[estado]\n" + "\n".join(lineas)
+
+        lineas.append(f"Combate: {combate.id} — {combate.estado}")
+        lineas.append(f"Ronda: {combate.ronda}")
+        if combate.enemigos:
+            lineas.append("Enemigos:")
+            for enemigo in combate.enemigos:
+                lineas.append(
+                    f"- {enemigo.id}: {enemigo.estado}, {enemigo.hp_actual}/{enemigo.hp_max} HP"
+                )
+        pendientes = sum(1 for p in combate.propuestas_reaccion if p.estado == "pendiente")
+        lineas.append(f"Reacciones pendientes: {pendientes}")
+        return "[estado]\n" + "\n".join(lineas)
 
 
 def repl(
@@ -314,7 +433,9 @@ def repl(
     escribir: Callable[[str], None] | None = None,
 ) -> int:
     """Bucle REPL. `ctx` debe exponer procesar/info_sesion/guardar/
-    nueva_sesion/alternar_debug/ejecutar_tool_manual (ver `SesionInteractiva`).
+    nueva_sesion/alternar_debug/ejecutar_tool_manual/comando_combate/
+    comando_turno/comando_reacciones/comando_ficha/comando_estado (ver
+    `SesionInteractiva`).
 
     `leer`/`escribir` se resuelven en tiempo de llamada (no como defaults
     capturados) para que sean inyectables y monkeypatcheables en tests."""
@@ -358,6 +479,21 @@ def repl(
             continue
         if texto == "/tool" or texto.startswith("/tool "):
             escribir(ctx.ejecutar_tool_manual(texto[len("/tool") :]))
+            continue
+        if texto == "/combate":
+            escribir(ctx.comando_combate())
+            continue
+        if texto == "/turno":
+            escribir(ctx.comando_turno())
+            continue
+        if texto == "/reacciones":
+            escribir(ctx.comando_reacciones())
+            continue
+        if texto == "/ficha":
+            escribir(ctx.comando_ficha())
+            continue
+        if texto == "/estado":
+            escribir(ctx.comando_estado())
             continue
         if texto.startswith("/"):
             escribir(f"Comando desconocido: {texto}. Usa /ayuda.")
