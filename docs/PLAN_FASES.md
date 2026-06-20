@@ -301,6 +301,45 @@ toca mecánica de juego:
   garantiza que F6.3 nunca reemplaza ni debilita la disciplina anti-pseudo-
   call de F6.1/F6.1.1.
 
+---
+
+## F6.4 — Comando manual `/tool` (depuración/recuperación sin LLM)
+
+> Igual que F6.1-F6.3: no es parte de "Fase 6" de creación de mundo. Incluso
+> con F6.3 detectando correctamente "el usuario pidió una tool explícita y
+> el modelo no la llamó" y reintentando, hay modelos locales que **siguen**
+> sin emitir la tool call real tras el reintento, pese a instrucciones
+> explícitas con todos los argumentos. Hace falta una vía de recuperación
+> que no dependa de que el modelo coopere.
+
+**Objetivo.** ✅ **Implementada** (commit `feat: add manual tool command`).
+Comando `/tool <nombre_tool_api> <json_argumentos>` en el REPL: ejecuta una
+tool real **directamente**, sin pasar por el LLM. **No añade mecánicas de
+combate ni reglas nuevas; no toca esquemas de combate, lógica de ataque,
+daño, iniciativa, inventario, ficha ni memoria narrativa.**
+
+- **Parser testeable** (`src/dm_agent/nucleo/bucle.py`):
+  `parsear_comando_tool(linea) -> (nombre_api, argumentos)` separa el nombre
+  de la tool del JSON de argumentos y valida que decodifique a un objeto;
+  lanza `ErrorComandoTool` (mensaje legible) si falta algo o el JSON es
+  inválido — nunca rompe el REPL.
+- **Ejecución** (`SesionInteractiva.ejecutar_tool_manual`): resuelve el
+  nombre API contra `RegistroHerramientas` (error controlado si no existe) y
+  llama `dispatch_api` de verdad — los cambios se persisten igual que una
+  tool llamada por el LLM. El resultado se muestra formateado:
+  `[tool] <nombre> -> ok=<bool>` + JSON con indentación.
+  Se registra como `tool_call`/`tool_result` en `Sesion` (mismo rastro de
+  auditoría que deja el LLM), pero **no** como turno `user`/`assistant`: no
+  entra en el historial conversacional que `AgenteDM` reinyecta al LLM.
+- **REPL** (`repl()` en `bucle.py`): nueva entrada en `COMANDOS` (aparece en
+  `/ayuda`); las líneas que empiezan por `/tool` se enrutan a
+  `ctx.ejecutar_tool_manual(...)` antes del catch-all de "comando
+  desconocido", sin pasar por `ctx.procesar()` (el camino que sí llama al
+  LLM).
+- **No interactúa con F6.1/F6.1.1/F6.3**: `/tool` solo se dispara cuando el
+  usuario escribe `/tool` explícitamente; nunca parsea ni ejecuta texto que
+  el modelo haya escrito (JSON/XML simulado sigue sin ejecutarse jamás).
+
 **Archivos.** `src/dm_agent/prompts/system_dm_minimo.md`,
 `src/dm_agent/nucleo/agente.py`.
 

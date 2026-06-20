@@ -392,7 +392,9 @@ La prueba se considera válida si, contra un endpoint real:
   tras el reintento sigue sin llamarla, responde
   "No se ha podido ejecutar la herramienta solicitada: ..." — nunca afirma
   que se ejecutó si no hay una línea `[debug] tool <nombre>(...) -> ok=...`
-  real respaldándolo.
+  real respaldándolo. Si esto pasa repetidamente con la misma tool/modelo,
+  usa el comando manual `/tool` (F6.4, ver sección 10 más abajo) para
+  ejecutarla tú directamente sin depender del LLM.
 - **El modelo no llama tools** (solo narra): falta
   `--enable-auto-tool-choice`/`--tool-call-parser` en el servidor, o el
   modelo es demasiado pequeño para tool-calling fiable. Usa un modelo más
@@ -441,6 +443,59 @@ no automáticos. Las reacciones se proponen y esperan confirmación; confirmar
 no es lo mismo que aplicar. Al terminar el combate, queda una entrada
 narrativa del desenlace. Al cerrar la sesión, queda un resumen y un punto de
 arranque para la próxima; al continuar, el agente recuerda ambos.
+
+---
+
+## 10. Comando manual `/tool` (F6.4)
+
+`/tool <nombre_tool_api> <json_argumentos>` ejecuta una tool real
+**directamente desde el REPL, sin pasar por el LLM**. Sirve para depuración
+y recuperación manual cuando un modelo local no emite una tool call real
+aunque la tool esté disponible y el usuario la haya pedido explícitamente
+(F6.3 lo detecta y reintenta una vez, pero si el modelo sigue sin llamarla,
+`/tool` permite seguir jugando sin esperar a que el modelo coopere).
+
+```text
+> /tool combate_listar_reacciones {"campaña_id":"campana_tyr","combate_id":"combate_aa6049b2"}
+[tool] combate_listar_reacciones -> ok=True
+{
+  "combate_id": "combate_aa6049b2",
+  "propuestas": [...]
+}
+
+> /tool combate_resolver_reaccion {"campaña_id":"campana_tyr","combate_id":"combate_aa6049b2","propuesta_id":"reaccion_f8b95457","decision":"confirmar","motivo":"ataque de oportunidad aceptado"}
+[tool] combate_resolver_reaccion -> ok=True
+{
+  "propuesta_id": "reaccion_f8b95457",
+  "estado": "confirmada"
+}
+
+> /tool ficha_leer {"campaña_id":"campana_tyr","personaje_id":"tyr"}
+[tool] ficha_leer -> ok=True
+{
+  "personaje_id": "tyr",
+  ...
+}
+```
+
+Notas:
+
+- Acepta el **nombre API real** de la tool (el mismo que ves en
+  `[debug] tools expuestas: ...` o `[debug] tool <nombre>(...)`), no el
+  nombre interno con puntos.
+- Los argumentos son JSON tras el nombre de la tool, en una sola línea.
+- JSON inválido o tool inexistente muestran un error controlado
+  (`[tool] error: ...` / `[tool] <nombre> -> error: herramienta
+  desconocida`) sin romper el REPL.
+- La tool se ejecuta de verdad (`RegistroHerramientas.dispatch_api`): los
+  cambios se persisten igual que si los hubiera llamado el LLM.
+- La llamada manual **no entra en el historial conversacional** que se
+  reinyecta al LLM (no es un turno `user`/`assistant`); sí queda registrada
+  como `tool_call`/`tool_result` en la sesión, igual que el rastro de
+  auditoría de una tool llamada por el LLM.
+- `/tool` solo se ejecuta cuando el usuario lo escribe explícitamente; no
+  tiene relación con la detección de pseudo-calls de F6.1/F6.1.1 (que sigue
+  sin parsear ni ejecutar nunca el texto que escribe el modelo).
 
 ---
 

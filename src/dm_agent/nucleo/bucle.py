@@ -3,6 +3,14 @@
 Mantiene `cli.py` fino: aquí viven el factory del agente, el controlador de la
 sesión interactiva y el bucle de lectura/escritura. El bucle recibe `leer`/
 `escribir` inyectables para poder testearse sin terminal ni red.
+
+F6.4: además del flujo normal (usuario → LLM → tool calls), el comando
+`/tool <nombre_tool_api> <json_argumentos>` ejecuta una tool real
+directamente desde el REPL, sin pasar por el LLM. Es una vía de depuración/
+recuperación manual para cuando un modelo local no emite una tool call real
+aunque la tool esté disponible (ver F6.1-F6.3): el usuario puede forzar la
+ejecución él mismo. No se añade al historial conversacional del LLM (no
+pasa por `Sesion.registrar_usuario`/`registrar_asistente`).
 """
 
 from __future__ import annotations
@@ -22,7 +30,7 @@ from dm_agent.herramientas.ficha import crear_tools_ficha
 from dm_agent.herramientas.hp_xp import crear_tools_hp_xp
 from dm_agent.herramientas.inventario import crear_tools_inventario
 from dm_agent.herramientas.narrativa import crear_tools_narrativa
-from dm_agent.herramientas.registro import RegistroHerramientas
+from dm_agent.herramientas.registro import HerramientaNoRegistrada, RegistroHerramientas
 from dm_agent.herramientas.resumen import crear_tools_resumen
 from dm_agent.herramientas.sesion import crear_tools_sesion
 from dm_agent.llm.cliente import ClienteLLM, ErrorLLM
@@ -46,7 +54,39 @@ COMANDOS = {
     "/nueva": "crea una sesión nueva",
     "/cerrar": "cierra la sesión: resumen + preparación de la próxima",
     "/debug": "activa/desactiva la traza de depuración",
+    "/tool": "ejecuta una tool real sin pasar por el LLM: /tool <nombre_tool_api> <json>",
 }
+
+
+class ErrorComandoTool(ValueError):
+    """Línea de `/tool` mal formada (nombre o JSON de argumentos)."""
+
+
+def parsear_comando_tool(linea: str) -> tuple[str, dict[str, Any]]:
+    """Parsea el cuerpo de `/tool <nombre_tool_api> <json_argumentos>` (F6.4).
+
+    `linea` es el texto **después** de `/tool` (puede incluir o no el espacio
+    inicial). Lanza `ErrorComandoTool` con un mensaje legible si falta el
+    nombre, falta el JSON, o el JSON no decodifica a un objeto."""
+    texto = linea.strip()
+    if not texto:
+        raise ErrorComandoTool("uso: /tool <nombre_tool_api> <json_argumentos>")
+
+    partes = texto.split(maxsplit=1)
+    nombre_api = partes[0]
+    json_texto = partes[1].strip() if len(partes) > 1 else ""
+    if not json_texto:
+        raise ErrorComandoTool(
+            "faltan los argumentos JSON: /tool <nombre_tool_api> <json_argumentos>"
+        )
+
+    try:
+        argumentos = json.loads(json_texto)
+    except json.JSONDecodeError as e:
+        raise ErrorComandoTool(f"JSON de argumentos inválido: {e}") from e
+    if not isinstance(argumentos, dict):
+        raise ErrorComandoTool('los argumentos deben ser un objeto JSON, p. ej. {"clave": ...}')
+    return nombre_api, argumentos
 
 
 def _texto_ayuda() -> str:
@@ -237,6 +277,35 @@ class SesionInteractiva:
             f"== Punto de arranque de la próxima ==\n{entradas['preparacion'].contenido}"
         )
 
+    def ejecutar_tool_manual(self, linea: str) -> str:
+        """Comando `/tool` (F6.4): ejecuta una tool real directamente, sin
+        pasar por el LLM. Depuración/recuperación manual cuando el modelo no
+        emite una tool call real aunque la tool exista. No toca `Sesion`
+        como turno conversacional (no se reinyecta al LLM); solo registra
+        `tool_call`/`tool_result` para el mismo rastro de auditoría que dejan
+        las tools llamadas por el LLM."""
+        try:
+            nombre_api, argumentos = parsear_comando_tool(linea)
+        except ErrorComandoTool as e:
+            return f"[tool] error: {e}"
+
+        try:
+            self.registro.nombre_api_a_interno(nombre_api)
+        except HerramientaNoRegistrada:
+            return f"[tool] {nombre_api} -> error: herramienta desconocida"
+
+        try:
+            resultado = self.registro.dispatch_api(nombre_api, ctx=None, **argumentos)
+        except TypeError as e:
+            return f"[tool] {nombre_api} -> error: argumentos inválidos: {e}"
+
+        datos = resultado.datos if resultado.ok else {"error": "; ".join(resultado.errores)}
+        if self.sesion is not None:
+            self.sesion.registrar_tool_call(nombre_api, argumentos)
+            self.sesion.registrar_tool_result(nombre_api, datos, ok=resultado.ok)
+        cuerpo = json.dumps(datos, ensure_ascii=False, indent=2)
+        return f"[tool] {nombre_api} -> ok={resultado.ok}\n{cuerpo}"
+
 
 def repl(
     ctx: Any,
@@ -245,7 +314,7 @@ def repl(
     escribir: Callable[[str], None] | None = None,
 ) -> int:
     """Bucle REPL. `ctx` debe exponer procesar/info_sesion/guardar/
-    nueva_sesion/alternar_debug (ver `SesionInteractiva`).
+    nueva_sesion/alternar_debug/ejecutar_tool_manual (ver `SesionInteractiva`).
 
     `leer`/`escribir` se resuelven en tiempo de llamada (no como defaults
     capturados) para que sean inyectables y monkeypatcheables en tests."""
@@ -283,6 +352,9 @@ def repl(
             continue
         if texto == "/debug":
             escribir(ctx.alternar_debug())
+            continue
+        if texto == "/tool" or texto.startswith("/tool "):
+            escribir(ctx.ejecutar_tool_manual(texto[len("/tool") :]))
             continue
         if texto.startswith("/"):
             escribir(f"Comando desconocido: {texto}. Usa /ayuda.")

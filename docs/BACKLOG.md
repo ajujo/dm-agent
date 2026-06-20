@@ -214,6 +214,15 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Decisión técnica (común a las tres).** Ninguna de las tres defensas cambia mecánica de juego ni toca esquemas de combate/ataque/daño/iniciativa/inventario/ficha/memoria narrativa: viven enteramente en el agent loop (`AgenteDM.responder`). Tests: `tests/test_agent_tool_robustness.py`.
 - **P.** P0 (mismo incidente real que #F6.3-02).
 
+## F6.4 — Comando manual `/tool` (depuración/recuperación sin LLM)
+
+> Igual que F6.1-F6.3: no es parte de "F6 — Creación de mundo" (más abajo).
+
+### #F6.4-01 — Comando `/tool` para ejecutar tools reales sin pasar por el LLM — ✅ HECHO (F6.4)
+- **Estado.** Incluso con F6.3 detectando "tool explícita mencionada pero no ejecutada" y reintentando una vez, hubo un caso real (`combate_listar_reacciones` con todos los argumentos en el mensaje) donde el modelo seguía sin emitir la tool call real tras el reintento. Corregido añadiendo un comando manual al REPL: `/tool <nombre_tool_api> <json_argumentos>` (`src/dm_agent/nucleo/bucle.py`) ejecuta `RegistroHerramientas.dispatch_api` directamente — `parsear_comando_tool` separa nombre/JSON y valida (error controlado, nunca rompe el REPL si el JSON es inválido o la tool no existe); `SesionInteractiva.ejecutar_tool_manual` resuelve y despacha, persiste los cambios igual que una tool real del LLM, y registra `tool_call`/`tool_result` en `Sesion` para auditoría — pero **sin** registrar un turno `user`/`assistant`, así que no entra en el historial conversacional que se reinyecta al LLM. Aparece en `/ayuda`. Tests: `tests/test_cli.py`.
+- **Decisión técnica.** `/tool` es estrictamente un comando manual disparado por el usuario; no tiene ninguna relación con la detección de pseudo-calls (F6.1/F6.1.1) ni con el reintento de F6.3 — nunca parsea ni ejecuta texto que haya escrito el modelo, solo lo que el usuario escribe explícitamente tras `/tool`.
+- **P.** P1 (mejora de robustez/recuperación; no bloqueaba el uso del agente, pero limitaba la prueba manual cuando un modelo concreto se resistía a una tool).
+
 ---
 
 ## F6 — Creación de mundo / campaña / aventura
