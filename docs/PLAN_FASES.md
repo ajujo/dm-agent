@@ -128,21 +128,25 @@ Subfases:
 - **F5.3 — Ataques básicos contra CA y daño.** ✅ **Implementada** (commit `feat: add basic attack resolution`). `1d20 + modificador_ataque` contra CA, igual que D&D: natural 1 falla siempre, natural 20 impacta siempre (daño duplicado en dados, no modificador). Tools `combate.{atacar_enemigo,atacar_personaje}` con eventos `ataque_enemigo_resuelto`/`ataque_personaje_resuelto`. `combate.atacar_enemigo` reutiliza el umbral de estado de `combate.daño_enemigo`; `combate.atacar_personaje` aplica daño directamente sobre `Ficha` vía `GestorEstado` (deliberadamente sin llamar a `hp_xp.aplicar_daño`, para no duplicar evento — ver ADR-0018). Nuevo `ResultadoAtaque` (dataclass interno, no persistido). Ninguna de las dos tools avanza turno automáticamente: el avance sigue siendo explícito vía `combate.avanzar_turno`. `distancia` sigue siendo informativa, no bloquea ataques por alcance. Sin IA enemiga, sin selección automática de acciones.
 - **F5.4 — Ventaja/desventaja y modificadores narrativos simples.** ✅ **Implementada** (commit `feat: add advantage and situational attack modifiers`). `modo_tirada` (`normal`/`ventaja`/`desventaja`) en `combate.{atacar_enemigo,atacar_personaje}`: ventaja/desventaja tiran 2d20 y eligen el mayor/menor; natural 1/20 se evalúa sobre la tirada elegida. `modificador_situacional` (-10..10) más `motivo_modificador` (texto narrativo) se suman al total junto con `modificador_ataque`. Sin campos nuevos, comportamiento idéntico a F5.3. Si ventaja y desventaja coinciden, se cancelan conceptualmente y quien llama pasa `modo_tirada="normal"` — la tool no acumula ni resuelve múltiples fuentes. `ResultadoAtaque` ampliado con `modo_tirada`/`tiradas_d20`/`modificador_situacional`/`motivo_modificador`; eventos `ataque_*_resuelto` incluyen los mismos campos nuevos.
 - **F5.5 — Acciones de turno y propuestas de reacción.** ✅ **Implementada** (commit `feat: add turn actions and reaction proposals`). Nuevos esquemas `AccionTurno` (registro narrativo de qué hizo un participante, sin validar economía de acciones) y `PropuestaReaccion` (reacción/ataque de oportunidad propuesto, ciclo `pendiente`→`confirmada`/`rechazada`/`caducada`); campos `CombateNarrativo.{acciones_turno,propuestas_reaccion}` (default `[]`, sin migración). Tools `combate.{registrar_accion_turno,proponer_reaccion,resolver_reaccion,listar_reacciones}` con eventos `accion_turno_registrada`/`reaccion_propuesta`/`reaccion_resuelta`. **Ni proponer ni confirmar aplican el ataque/reacción**: aplicar de verdad exige llamar explícitamente a `combate.atacar_personaje`/`combate.atacar_enemigo` aparte (D-COMBATE-04, "el agente propone, el jugador confirma"). `registrar_accion_turno` avisa (no falla) si el participante no coincide con el turno actual. Sin motor completo de economía de acciones, sin flanqueo/ataques de oportunidad automáticos.
+- **F5.6 — Prueba integrada manual de combate.** ✅ **Implementada** (commit `test: add integrated combat manual validation`). **No añade reglas ni mecánicas nuevas**: es validación/documentación. Guía manual `docs/PRUEBA_MANUAL_F5_COMBATE.md` (escena de prueba, prompts sugeridos, flujo esperado de tools, rutas en disco a verificar, criterios de aceptación, troubleshooting) y escena de referencia `docs/escenarios/mini_aventura_combate.md`. Test automatizado `tests/test_combate_integrado_f5.py` (sin red, sin LLM real, `tmp_path`) cubre extremo a extremo: ficha → iniciar combate → añadir enemigo → iniciativa → atacar con ventaja → registrar acción de turno → proponer reacción → confirmar (sin aplicar daño) → aplicar la reacción confirmada con una llamada explícita de ataque → avanzar turno → terminar combate → verificar los 10 eventos auditables principales.
 
-**Archivos.** `esquemas/combate.py` + `estado/combate.py` + `herramientas/combate.py` ✅ F5.1 (distancias revisadas en F5.1.1, iniciativa/turnos en F5.2, ataques en F5.3, ventaja/desventaja en F5.4, acciones/reacciones en F5.5).
+**Archivos.** `esquemas/combate.py` + `estado/combate.py` + `herramientas/combate.py` ✅ F5.1 (distancias revisadas en F5.1.1, iniciativa/turnos en F5.2, ataques en F5.3, ventaja/desventaja en F5.4, acciones/reacciones en F5.5); `docs/PRUEBA_MANUAL_F5_COMBATE.md` + `docs/escenarios/mini_aventura_combate.md` ✅ F5.6 (sin cambios de código de reglas).
 
-**Tests.** `tests/test_combate_narrativo.py`, `tests/test_tools_combate.py` ✅ F5.1 / F5.1.1 / F5.2 / F5.3 / F5.4 / F5.5; `tests/test_iniciativa_turnos.py` ✅ F5.2; `tests/test_ataques_combate.py` ✅ F5.3 / F5.4; `tests/test_reacciones_combate.py` ✅ F5.5.
+**Tests.** `tests/test_combate_narrativo.py`, `tests/test_tools_combate.py` ✅ F5.1 / F5.1.1 / F5.2 / F5.3 / F5.4 / F5.5; `tests/test_iniciativa_turnos.py` ✅ F5.2; `tests/test_ataques_combate.py` ✅ F5.3 / F5.4; `tests/test_reacciones_combate.py` ✅ F5.5; `tests/test_combate_integrado_f5.py` ✅ F5.6.
 
-**Definición de hecho (F5.1 / F5.1.1 / F5.2 / F5.3 / F5.4 / F5.5).** El
-agente ya puede gestionar combates narrativos mínimos con enemigos simples
-y daño auditable, con vocabulario y distancias alineadas al estilo D&D
-narrativo sin grid; ya puede **tirar iniciativa clásica y avanzar turnos
-narrativos**; ya puede **resolver ataques básicos contra CA y aplicar
-daño**, con **ventaja/desventaja y modificadores narrativos simples**; y ya
-puede **registrar acciones de turno y proponer/rechazar/confirmar
-reacciones narrativas, sin aplicarlas automáticamente**. Aún no implementa
-IA enemiga, selección automática de acciones, motor completo de economía de
-acciones, reacciones/ataques de oportunidad/flanqueo mecánicos automáticos,
+**Definición de hecho (F5.1 / F5.1.1 / F5.2 / F5.3 / F5.4 / F5.5 / F5.6).**
+El agente ya puede gestionar combates narrativos mínimos con enemigos
+simples y daño auditable, con vocabulario y distancias alineadas al estilo
+D&D narrativo sin grid; ya puede **tirar iniciativa clásica y avanzar
+turnos narrativos**; ya puede **resolver ataques básicos contra CA y
+aplicar daño**, con **ventaja/desventaja y modificadores narrativos
+simples**; ya puede **registrar acciones de turno y
+proponer/rechazar/confirmar reacciones narrativas, sin aplicarlas
+automáticamente**; y el proyecto ya tiene una **guía de prueba funcional
+para jugar una escena corta de combate narrativo D&D sin grid**, validada
+también con un test integrado sin red. Aún no implementa IA enemiga,
+selección automática de acciones, motor completo de economía de acciones,
+reacciones/ataques de oportunidad/flanqueo mecánicos automáticos,
 cobertura mecánica, áreas de efecto, sorpresa, salvaciones de muerte,
 resistencias, hechizos, balance automático ni XP automática.
 

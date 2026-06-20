@@ -1,0 +1,362 @@
+# Prueba manual de F5 (combate narrativo D&D sin grid)
+
+> Mini-fase **F5.6**: validación manual, contra un endpoint LLM real, de una
+> escena completa de combate narrativo D&D sin grid. No añade reglas nuevas;
+> complementa al test integrado `tests/test_combate_integrado_f5.py`.
+
+Esta guía verifica el ciclo completo de combate construido en F5.1–F5.5:
+ficha → escena narrativa → `combate.iniciar` → enemigos → iniciativa → turnos →
+ataques contra CA (con ventaja/desventaja) → acción de turno → propuesta de
+reacción → confirmación/rechazo (sin aplicar daño) → aplicación explícita de
+la reacción confirmada → avance de turno → cierre del combate → memoria
+narrativa → cierre de sesión → continuidad.
+
+Si vienes de `docs/PRUEBA_MANUAL_F4.md`, los pasos de levantar el endpoint y
+crear la ficha son los mismos; aquí se asume que ya sabes hacerlo.
+
+---
+
+## 1. Preparación
+
+```bash
+cd /home/ajujo/Lab/Workspace/dm-agent
+conda activate rpg
+pip install -e .[dev]
+python scripts/check_perfil.py
+```
+
+Levanta un endpoint OpenAI-compatible con tool-calling habilitado (ver
+`docs/PRUEBA_MANUAL_F4.md`, paso 1, para el comando de `vLLM` recomendado).
+Sin `--enable-auto-tool-choice` + el `--tool-call-parser` correcto, el modelo
+charla pero nunca llama a las tools de combate.
+
+Lanza el REPL:
+
+```bash
+dm-agent --perfil rapido --nueva --debug
+```
+
+`--nueva` empieza una sesión limpia; `--debug` muestra cada tool call que
+ejecuta el agente — es la única forma fiable de comprobar que una mutación
+mecánica (HP, iniciativa, daño) viene de una tool real y no de texto
+inventado por el modelo. Comandos del REPL: `/ayuda`, `/continuar`, `/nueva`,
+`/guardar`, `/cerrar`, `/debug`, `/salir`.
+
+---
+
+## 2. Estado inicial esperado
+
+El REPL inyecta memoria narrativa y entidades de la campaña activa
+(`config/proyecto.json` → `"campaña_activa": "campana_demo"`).
+
+Si ya tienes `campana_demo`/`pj_tyr` de una prueba anterior (F4), puedes
+reutilizarlos: lo único que importa es que la ficha exista con `hp_actual`,
+`hp_max` y `ca` válidos. Si no existen todavía, créalos con las APIs del
+proyecto (no edites JSON a mano):
+
+```bash
+conda activate rpg
+python - <<'PY'
+from dm_agent.estado.gestor import GestorEstado
+from dm_agent.esquemas.ficha import Ficha
+
+gestor = GestorEstado("storage")
+ficha = Ficha.model_validate({
+    "id": "pj_tyr",
+    "nombre": "Tyr",
+    "clase": "Guerrero",
+    "nivel": 1,
+    "raza": "Humano",
+    "trasfondo": "Soldado",
+    "atributos": {"fuerza": 15, "destreza": 12, "constitucion": 14,
+                  "inteligencia": 10, "sabiduria": 11, "carisma": 9},
+    "hp_max": 12, "hp_actual": 12, "ca": 15,
+    "bonificador_competencia": 2, "xp": 0,
+    "inventario": [],
+})
+ruta = gestor.guardar_ficha("campana_demo", ficha)
+print("ficha guardada en", ruta)
+PY
+```
+
+Estado inicial esperado antes de empezar:
+
+- **Campaña activa**: `campana_demo` (o la que configures).
+- **Ficha**: `pj_tyr`, `hp_actual = hp_max = 12`, `ca = 15`.
+- **Inventario**: mínimo, no hace falta nada especial para combate.
+- **Memoria narrativa**: puede estar vacía o tener entradas previas de F4;
+  no afecta a esta prueba salvo para confirmar continuidad en el paso 10.
+- **Sin combate activo**: si quedó uno de una prueba anterior, termínalo
+  primero o usa una campaña nueva.
+
+---
+
+## 3. Mini escena de prueba
+
+Escena pensada para forzar los ocho puntos del checklist (iniciativa,
+ataques, ventaja/desventaja, acción de turno, reacción):
+
+> Tyr baja al sótano de una posada. Oye arañazos detrás de unos barriles. Dos
+> ratas gigantes emergen entre sacos rotos. Una de ellas está `cuerpo_a_cuerpo`;
+> la otra está a distancia `corta`. Hay una lámpara caída que puede servir
+> para distraerlas. Si Tyr se aparta de la rata cuerpo a cuerpo sin cubrirse,
+> esta podría intentar un ataque de oportunidad.
+
+Elementos cubiertos:
+
+- **1 PJ**: Tyr.
+- **2 enemigos sencillos**: `rata_1` (`cuerpo_a_cuerpo`), `rata_2` (`corta`).
+- **1 elemento narrativo para ventaja/desventaja**: la lámpara caída (puede
+  dar ventaja si Tyr la usa para distraer, o desventaja si una rata la usa
+  contra él).
+- **1 posible reacción/ataque de oportunidad**: la rata cuerpo a cuerpo si
+  Tyr se retira sin cubrirse.
+- **1 cierre narrativo**: Tyr derrota o ahuyenta a las ratas y encuentra algo
+  (p. ej. una trampilla) tras el combate.
+
+---
+
+## 4. Prompts sugeridos para el usuario
+
+Pega estos textos en el REPL, en orden. No son obligatorios palabra por
+palabra; lo importante es que cada uno empuje al modelo a usar la tool
+correspondiente.
+
+**Arranque de la escena:**
+
+```text
+Inicia una escena de D&D narrativo con Tyr en el sótano de la posada. Hay dos
+ratas gigantes, una cuerpo a cuerpo y otra a distancia corta. Usa las tools
+cuando haya que modificar estado mecánico (combate, HP, iniciativa, daño).
+No inventes HP ni daño sin tool.
+```
+
+**Iniciar combate y añadir enemigos:**
+
+```text
+Las ratas atacan. Inicia el combate y añade a las dos ratas como enemigos del
+combate, con su HP y CA.
+```
+
+**Tirar iniciativa:**
+
+```text
+Tira la iniciativa para Tyr y para las dos ratas.
+```
+
+**Atacar:**
+
+```text
+Tyr ataca a la rata que tiene cuerpo a cuerpo con su espada larga.
+```
+
+**Usar ventaja:**
+
+```text
+Tyr usa la lámpara caída para distraer a la rata antes de atacar: debería
+tener ventaja en esta tirada.
+```
+
+**Moverse fuera de cuerpo_a_cuerpo:**
+
+```text
+Tyr decide retirarse de la rata cuerpo a cuerpo hacia distancia corta, sin
+cubrirse, para ir a por la otra rata.
+```
+
+**Proponer reacción:**
+
+```text
+¿Tiene sentido que la rata cuerpo a cuerpo intente un ataque de oportunidad
+ahora que Tyr se retira sin cubrirse? Si es así, propón esa reacción.
+```
+
+**Confirmar/rechazar reacción:**
+
+```text
+Confirmo que la rata puede intentar ese ataque de oportunidad.
+```
+
+(o, para probar el otro camino: `No, Tyr se cubre a tiempo: rechaza esa reacción.`)
+
+**Cerrar combate:**
+
+```text
+Las ratas están derrotadas o huyen. Termina el combate y describe brevemente
+cómo termina la escena.
+```
+
+**Cerrar sesión:**
+
+```text
+/cerrar
+```
+
+---
+
+## 5. Flujo esperado de tools
+
+Con `--debug` deberías ver, aproximadamente en este orden, estas tool calls
+(el orden exacto puede variar un poco según cómo narre el modelo, pero todas
+deberían aparecer):
+
+```text
+ficha_leer
+combate_iniciar
+combate_anadir_enemigo
+combate_anadir_enemigo
+combate_tirar_iniciativa
+combate_turno_actual
+combate_atacar_enemigo
+combate_registrar_accion_turno
+combate_proponer_reaccion
+combate_resolver_reaccion
+combate_atacar_personaje
+combate_avanzar_turno
+combate_terminar
+narrativa_registrar
+sesion_cerrar
+```
+
+No pasa nada si `combate_atacar_personaje` no aparece (solo se llama si
+confirmas la reacción Y luego pides aplicarla); el resto debería aparecer
+siempre que sigas los prompts del paso 4.
+
+---
+
+## 6. Qué verificar en disco
+
+Todo vive bajo `storage/` (en `.gitignore`), relativo a la raíz del repo:
+
+```text
+storage/campañas/<campaña_id>/fichas/<personaje_id>.json
+storage/campañas/<campaña_id>/eventos.jsonl
+storage/campañas/<campaña_id>/combates/<combate_id>.json
+storage/campañas/<campaña_id>/combates/activo.json
+storage/campañas/<campaña_id>/narrativa/entradas.jsonl
+storage/sesiones/
+```
+
+> Nota: el subdirectorio es `campañas` (con ñ), no `campanas`.
+
+Eventos a buscar en `eventos.jsonl` (uno por línea JSON, campo `"tipo"`):
+
+```text
+combate_iniciado
+enemigo_añadido
+iniciativa_tirada
+ataque_enemigo_resuelto
+ataque_personaje_resuelto      (solo si se confirma y se aplica la reacción)
+accion_turno_registrada
+reaccion_propuesta
+reaccion_resuelta
+turno_avanzado
+combate_terminado
+```
+
+Comandos rápidos:
+
+```bash
+cat storage/campañas/campana_demo/eventos.jsonl | python -m json.tool 2>/dev/null
+cat storage/campañas/campana_demo/eventos.jsonl | grep -o '"tipo": *"[^"]*"'
+ls storage/campañas/campana_demo/combates/
+python -c "from dm_agent.estado.gestor import GestorEstado; \
+print(GestorEstado('storage').cargar_ficha('campana_demo','pj_tyr').hp_actual)"
+```
+
+---
+
+## 7. Criterios de aceptación
+
+La prueba se considera válida si, contra un endpoint real:
+
+1. El agente no inventa cambios mecánicos sin tool (con `--debug` se ve la
+   tool call antes de cualquier cambio de HP/iniciativa/daño).
+2. Los HP de los enemigos cambian **solo** mediante `combate_atacar_enemigo`
+   o `combate_dano_enemigo`.
+3. Los HP del PJ cambian **solo** mediante `combate_atacar_personaje` o
+   `hp_xp_aplicar_dano`.
+4. La iniciativa se guarda (`combate_tirar_iniciativa`, visible en
+   `<combate_id>.json` y en el evento `iniciativa_tirada`).
+5. El turno actual se puede consultar (`combate_turno_actual`) sin error.
+6. El turno **no** avanza automáticamente al atacar (`indice_turno_actual` no
+   cambia salvo que se llame explícitamente a `combate_avanzar_turno`).
+7. Las reacciones se proponen (`combate_proponer_reaccion`, estado
+   `pendiente`) pero no se aplican sin confirmación.
+8. Confirmar una reacción (`combate_resolver_reaccion`, `decision="confirmar"`)
+   **no** tira dados ni hace daño por sí mismo: el HP del objetivo no cambia
+   en ese paso.
+9. Para aplicar de verdad una reacción confirmada hace falta una llamada
+   explícita aparte a `combate_atacar_personaje`/`combate_atacar_enemigo`.
+10. Los eventos del paso 6 aparecen en `eventos.jsonl`.
+11. La memoria narrativa se puede registrar (`narrativa_registrar`) sobre el
+    desenlace del combate.
+12. `/cerrar` genera resumen (`tipo = resumen`) y preparación de la próxima
+    sesión (`tipo = siguiente_sesion`).
+13. Al continuar (`dm-agent --continuar`), el agente recuerda el resumen y el
+    estado de la campaña (memoria narrativa inyectada como `system` antes del
+    mensaje de usuario).
+
+---
+
+## 8. Resolución de problemas
+
+- **El modelo no llama tools** (solo narra): falta
+  `--enable-auto-tool-choice`/`--tool-call-parser` en el servidor, o el
+  modelo es demasiado pequeño para tool-calling fiable. Usa un modelo más
+  grande (ver `docs/MODELOS_LOCALES.md`) o revisa el arranque del servidor.
+- **El modelo inventa daño o HP** (dice "Tyr pierde 5 PV" sin que aparezca
+  una tool call): el system prompt ya pide no inventar mecánica; si persiste,
+  reformula el prompt insistiendo en "usa la tool correspondiente" o cambia
+  de modelo. Verifica con `--debug` que de verdad no hubo tool call antes de
+  reportarlo como bug.
+- **El modelo avanza turno sin tool**: si narra "ahora es el turno de la
+  rata" sin llamar a `combate_avanzar_turno`, el estado mecánico
+  (`indice_turno_actual`) no cambió de verdad — es solo narración. Pídele
+  explícitamente que "avance el turno" o llama tú a la tool si tienes acceso
+  directo. No es un bug: F5.5 decidió que avanzar turno sea siempre una
+  llamada explícita, nunca automática.
+- **El modelo aplica la reacción automáticamente** (llama a
+  `combate_atacar_personaje` justo después de confirmar, sin que tú lo
+  pidieras): repasa el system prompt/instrucciones — el diseño es "propone,
+  confirmas, y si quieres aplicarla pides explícitamente el ataque". Si el
+  modelo encadena confirmar→aplicar sin pedir tu confirmación explícita para
+  el segundo paso, es un problema de instrucción del modelo, no de las
+  tools (las tools en sí nunca encadenan esto).
+- **Error de campaña/ficha inexistente**: revisa que `campaña_activa` en
+  `config/proyecto.json` coincide con la campaña donde guardaste la ficha
+  (paso 2), y que no falta `pj_tyr.json` bajo
+  `storage/campañas/<campaña_id>/fichas/`.
+- **Endpoint LLM no responde**: `curl http://localhost:8000/v1/models` y
+  `python scripts/check_perfil.py` deben pasar antes de tocar el REPL.
+- **Contexto demasiado largo**: si la sesión lleva muchos turnos, considera
+  `/cerrar` y `--continuar` con una sesión nueva, o sube `max_tokens` del
+  perfil en `config/perfiles.json` si el modelo lo soporta.
+- **JSON/tool call inválido** (el modelo manda argumentos mal formados): la
+  tool devuelve `ResultadoHerramienta(ok=False, errores=[...])` sin
+  traceback; el agente debería poder reintentar. Si se cuelga, revisa el log
+  de `--debug` para ver qué argumentos mandó el modelo.
+
+---
+
+## 9. Resultado esperado de una sesión buena
+
+El DM narra con fluidez, pero cuando hay mecánica usa tools: iniciar combate,
+añadir enemigos, tirar iniciativa, atacar, registrar acción de turno,
+proponer una reacción. El usuario decide qué acciones toma Tyr y si confirma
+o rechaza las reacciones propuestas. El combate avanza por turnos explícitos,
+no automáticos. Las reacciones se proponen y esperan confirmación; confirmar
+no es lo mismo que aplicar. Al terminar el combate, queda una entrada
+narrativa del desenlace. Al cerrar la sesión, queda un resumen y un punto de
+arranque para la próxima; al continuar, el agente recuerda ambos.
+
+---
+
+## Límites de esta versión
+
+F5.6 es **validación manual**, no mecánica nueva: no añade IA enemiga,
+selector automático de acciones, motor completo de economía de acciones,
+ataques de oportunidad o flanqueo automáticos, condiciones completas,
+hechizos, grid/casillas, XP automática, RAG, memoria vectorial ni streaming.
+Si algo de eso falla en esta prueba, es esperado — no está implementado
+todavía (ver `docs/estado/combate.md` y `docs/BACKLOG.md`).
