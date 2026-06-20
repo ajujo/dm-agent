@@ -299,7 +299,10 @@ La prueba se considera válida si, contra un endpoint real:
 14. **El agente no debe escribir bloques JSON simulando llamadas de
     herramientas** (texto tipo `[{"name": "...", "arguments": {...}}]`); si
     necesita una tool, debe llamarla de verdad (F6.1, ver sección 8 más abajo,
-    "Si el modelo escribe JSON de tools en vez de llamar tools").
+    "Si el modelo escribe JSON de tools en vez de llamar tools"). Algunos
+    modelos pueden simular tools no solo en JSON, sino también con etiquetas
+    tipo `<call:name="...">`. Eso tampoco ejecuta herramientas reales. Una
+    tool real siempre aparece en debug como `[debug] tool ...` (F6.1.1).
 
 ---
 
@@ -322,6 +325,16 @@ La prueba se considera válida si, contra un endpoint real:
   prompt. Prueba con un modelo con mejor seguimiento de instrucciones/tool-
   calling (ver `docs/MODELOS_LOCALES.md`), o pide explícitamente "llama a la
   tool real, no escribas el JSON".
+- **Si el modelo escribe XML/pseudo-calls en vez de llamar tools** (responde
+  con algo tipo `<call:name="ficha_leer"><call:param="...">...</call:>`, o
+  con etiquetas `<tool_call>`/`<tool>`): es el mismo fallo de disciplina de
+  tool-use que el caso anterior, solo que en otro formato. Algunos modelos
+  pueden simular tools no solo en JSON, sino también con etiquetas tipo
+  `<call:name="...">`. Eso tampoco ejecuta herramientas reales. Una tool real
+  siempre aparece en debug como `[debug] tool ...`. Desde F6.1.1, el detector
+  (`_contiene_tool_call_simulada`) también reconoce este patrón y aplica la
+  misma política: aviso en `--debug` + reintento automático una sola vez por
+  turno con un mensaje correctivo que nombra ambos formatos prohibidos.
 - **El modelo no llama tools** (solo narra): falta
   `--enable-auto-tool-choice`/`--tool-call-parser` en el servidor, o el
   modelo es demasiado pequeño para tool-calling fiable. Usa un modelo más

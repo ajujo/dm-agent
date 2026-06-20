@@ -192,6 +192,25 @@ añade mecánicas de combate ni reglas nuevas.**
   turno con un mensaje correctivo; en `--debug` siempre imprime un aviso. Si
   el modelo insiste tras el reintento, se devuelve tal cual (no hay bucle).
 
+---
+
+## F6.1.1 — Detección de tool calls simuladas en XML/pseudo-call
+
+> Igual que F6.1: no es parte de "Fase 6" de creación de mundo. Corrección de
+> robustez descubierta en una segunda prueba manual real: el detector de
+> F6.1 avisó correctamente sobre JSON simulado, pero el modelo volvió a
+> simular una tool call con otro formato (`<call:name="...">`).
+
+**Objetivo.** ✅ **Implementada** (commit `fix: detect xml-style simulated
+tool calls`). Amplía `_contiene_tool_call_simulada` para reconocer también
+pseudo-calls en XML (`<call:name="...">`, `<call:param="...">`, `</call:>`)
+y etiquetas tipo `<tool_call>`/`<tool>`, sin cambiar la política: solo
+detectar, avisar en `--debug` y reintentar una vez por turno (nunca parsear
+ni ejecutar el contenido simulado). El mensaje correctivo ahora nombra
+explícitamente ambos formatos prohibidos (JSON y XML/pseudo-call), y el
+system prompt incluye ambos ejemplos prohibidos. **No añade mecánicas de
+combate ni reglas nuevas.**
+
 **Archivos.** `src/dm_agent/prompts/system_dm_minimo.md`,
 `src/dm_agent/nucleo/agente.py`.
 

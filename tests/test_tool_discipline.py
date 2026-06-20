@@ -1,15 +1,20 @@
-"""F6.1: disciplina de uso de tools (prompt + detector + reintento). Sin red.
+"""F6.1/F6.1.1: disciplina de uso de tools (prompt + detector + reintento). Sin red.
 
-Cubre: el prompt del DM prohíbe tool calls simuladas en texto y exige tools
-reales para cambios de estado mecánico; el detector de tool calls simuladas
-(`_contiene_tool_call_simulada`) distingue una llamada falsa de JSON narrativo
-normal; el agent loop reintenta como máximo una vez por turno cuando detecta
-una tool call simulada, sin parsearla ni ejecutarla.
+Cubre: el prompt del DM prohíbe tool calls simuladas en texto (JSON y
+XML/pseudo-call) y exige tools reales para cambios de estado mecánico; el
+detector de tool calls simuladas (`_contiene_tool_call_simulada`) distingue
+una llamada falsa (JSON, `<call:name=...>`, `<call:param=...>`, `<tool_call>`)
+de texto narrativo normal; el agent loop reintenta como máximo una vez por
+turno cuando detecta una tool call simulada, sin parsearla ni ejecutarla.
 """
 
 from dm_agent.herramientas.registro import RegistroHerramientas
 from dm_agent.llm.cliente import RespuestaLLM
-from dm_agent.nucleo.agente import AgenteDM, _contiene_tool_call_simulada
+from dm_agent.nucleo.agente import (
+    _MENSAJE_CORRECTIVO_TOOL_SIMULADA,
+    AgenteDM,
+    _contiene_tool_call_simulada,
+)
 from dm_agent.persistencia.sesion import Sesion
 from dm_agent.prompts import SYSTEM_DM_MINIMO, cargar_prompt
 
@@ -61,6 +66,13 @@ def test_prompt_incluye_campaña_por_defecto_y_no_duplicar_combate():
     assert "no inicies otro combate" in _PROMPT
 
 
+def test_prompt_incluye_ambos_ejemplos_prohibidos():
+    """F6.1.1: el prompt debe mostrar tanto el ejemplo JSON como el XML."""
+    assert '"name"' in _PROMPT and '"arguments"' in _PROMPT
+    assert '<call:name="ficha_leer">' in _PROMPT
+    assert "texto falso" in _PROMPT
+
+
 # --- Parte F.4-5: el detector reconoce tool calls simuladas, no JSON narrativo normal -------
 
 
@@ -80,14 +92,41 @@ def test_detecta_tool_call_simulada_en_bloque_multilinea():
     assert _contiene_tool_call_simulada(texto)
 
 
+def test_detecta_tool_call_simulada_en_xml_call_name():
+    texto = (
+        '<call:name="ficha_leer"><call:param="campaña_id">campana_tyr'
+        '</call:param><call:param="personaje_id">tyr</call:param></call:>'
+    )
+    assert _contiene_tool_call_simulada(texto)
+
+
+def test_detecta_tool_call_simulada_en_xml_call_param():
+    texto = '<call:param="campaña_id">campana_tyr</call:param>'
+    assert _contiene_tool_call_simulada(texto)
+
+
+def test_detecta_tool_call_simulada_en_tool_call_tag():
+    texto = '<tool_call>{"name": "ficha_leer"}</tool_call>'
+    assert _contiene_tool_call_simulada(texto)
+
+
 def test_no_marca_json_narrativo_normal():
     casos = [
         "Tyr entra en la taberna y pide una cerveza.",
         '{"escena": "sotano", "enemigos": 2}',
         "El personaje se llama Tyr; tiene un arguments de pelea complicado con el tabernero.",
+        "Tyr saca su herramienta favorita: una palanca de hierro.",
     ]
     for texto in casos:
         assert not _contiene_tool_call_simulada(texto), texto
+
+
+def test_mensaje_correctivo_prohibe_json_y_xml():
+    """F6.1.1: el reprompt debe nombrar explícitamente ambos formatos prohibidos."""
+    mensaje = _MENSAJE_CORRECTIVO_TOOL_SIMULADA.lower()
+    assert "json" in mensaje
+    assert '<call:name="...">' in mensaje
+    assert "<tool_call>" in mensaje
 
 
 # --- Parte F.6: el reintento automático ocurre como máximo una vez por turno ---------------

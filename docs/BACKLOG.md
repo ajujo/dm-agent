@@ -182,6 +182,11 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Pendiente:** si el modelo ignora el reintento y sigue escribiendo JSON simulado, no hay corrección adicional — es un límite de qué tan bien el modelo sigue instrucciones, no algo que el cliente pueda forzar. No se intentó normalizar/parsear el JSON simulado como fallback de ejecución (riesgo de seguridad, descartado explícitamente).
 - **P.** P0 (bloqueaba el uso real del agente en pruebas manuales).
 
+### #F6.1.1-01 — Detectar tool calls simuladas en XML/pseudo-call — ✅ HECHO (F6.1.1)
+- **Estado.** En una segunda prueba manual real, el detector de F6.1 avisó correctamente sobre JSON simulado, pero el modelo volvió a simular una tool call con otro formato: `<call:name="ficha_leer"><call:param="campaña_id">campana_tyr</call:param><call:param="personaje_id">tyr</call:param></call:>`. Corregido ampliando `_contiene_tool_call_simulada` (`src/dm_agent/nucleo/agente.py`) para reconocer también `<call:name=...>`, `<call:param=...>`, `</call:>`, `<tool_call>` y `<tool>`, sin parsear ni ejecutar ese contenido. El mensaje correctivo (`_MENSAJE_CORRECTIVO_TOOL_SIMULADA`) ahora nombra explícitamente ambos formatos prohibidos (JSON y XML/pseudo-call). El system prompt (`src/dm_agent/prompts/system_dm_minimo.md`) incluye ambos ejemplos prohibidos. Tests ampliados en `tests/test_tool_discipline.py`.
+- **Decisión técnica.** Misma política que F6.1: detectar y reintentar una vez por turno, nunca parsear/ejecutar el contenido simulado. Se mantuvo el límite de un único reintento automático por turno (no se añadió un segundo nivel de reintento ni una lista extensible de formatos "por si acaso" — solo los formatos observados realmente en pruebas manuales).
+- **P.** P0 (mismo bloqueo que F6.1, otro formato de texto simulado).
+
 ---
 
 ## F6 — Creación de mundo / campaña / aventura

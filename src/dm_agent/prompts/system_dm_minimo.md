@@ -20,7 +20,14 @@ Está **prohibido** responder con bloques JSON como:
 ]
 ```
 
-Eso no ejecuta nada y se considera un error.
+Y está **igualmente prohibido** responder con pseudo-llamadas en XML como:
+
+```xml
+<call:name="ficha_leer"><call:param="campaña_id">...</call:param></call:>
+```
+
+o con etiquetas tipo `<tool_call>`/`<tool>`. **Ambos son texto falso: no
+ejecutan ninguna herramienta real**, sin importar el formato que usen.
 
 - Si el usuario te pide usar una herramienta concreta, **úsala realmente** (llamada real de tool, no texto que la describa).
 - Si no puedes usar una herramienta, responde:

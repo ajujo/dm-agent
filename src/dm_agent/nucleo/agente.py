@@ -16,6 +16,12 @@ un bloque tipo `[{"name": "ficha_leer", "arguments": {...}}]` que parece una
 tool call pero no ejecuta nada. `_contiene_tool_call_simulada` detecta ese
 patrón (sin intentar parsearlo ni ejecutarlo: sería peligroso) y dispara como
 máximo un reintento corrector por turno.
+
+F6.1.1: el mismo problema reaparece en formato XML/pseudo-call (por ejemplo
+`<call:name="ficha_leer"><call:param="...">...</call:>`) o con etiquetas tipo
+`<tool_call>`/`<tool>`. `_contiene_tool_call_simulada` se amplía para
+reconocer también esos formatos, con la misma política: solo detectar y
+avisar/reintentar, nunca parsear ni ejecutar.
 """
 
 from __future__ import annotations
@@ -31,22 +37,35 @@ from dm_agent.persistencia.sesion import Sesion
 
 _PATRON_TOOL_CALL_SIMULADA = re.compile(
     r'"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:'
-    r'|"arguments"\s*:\s*\{.*?\}\s*,\s*"name"\s*:\s*"[^"]+"',
+    r'|"arguments"\s*:\s*\{.*?\}\s*,\s*"name"\s*:\s*"[^"]+"'
+    r"|<call:name\s*="
+    r"|<call:param\s*="
+    r"|</call:>"
+    r"|<tool_call\b"
+    r"|<tool>",
     re.DOTALL,
 )
 
 _MENSAJE_CORRECTIVO_TOOL_SIMULADA = (
-    "Has escrito una llamada a herramienta como texto. Eso está prohibido. Si necesitas "
-    "usar una herramienta, llama a la tool real a través del sistema de tools. Reintenta ahora."
+    "Has escrito una llamada a herramienta como texto. Eso está prohibido.\n\n"
+    "No escribas JSON de tool calls.\n"
+    'No escribas XML/pseudo-calls como <call:name="...">.\n'
+    "No escribas <tool_call> ni formatos similares.\n\n"
+    "Si necesitas usar una herramienta, debes llamar a la tool real mediante el sistema "
+    "de tools.\n"
+    "Reintenta ahora usando una tool call real o responde que no puedes."
 )
 
 
 def _contiene_tool_call_simulada(texto: str) -> bool:
-    """Detecta un bloque tipo {"name": ..., "arguments": ...} escrito como texto.
+    """Detecta una tool call simulada como texto: JSON tipo {"name": ..., "arguments": ...}
+    o XML/pseudo-call tipo <call:name="...">, <call:param="...">, </call:>, <tool_call>,
+    <tool>.
 
-    Deliberadamente no intenta parsear ni ejecutar ese JSON: solo lo detecta
-    para poder avisar/reintentar. Un JSON narrativo normal (sin las claves
-    "name"+"arguments" juntas) no debe disparar esto.
+    Deliberadamente no intenta parsear ni ejecutar ese contenido: solo lo
+    detecta para poder avisar/reintentar. Un JSON narrativo normal (sin las
+    claves "name"+"arguments" juntas, ni esas etiquetas) no debe disparar
+    esto.
     """
     return bool(_PATRON_TOOL_CALL_SIMULADA.search(texto))
 
