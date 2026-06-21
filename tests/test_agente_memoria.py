@@ -62,11 +62,13 @@ def test_agente_con_memoria_inyecta_bloque(tmp_path):
     agente = _agente(tmp_path, cliente, con_memoria=True)
     agente.responder("¿Qué hago ahora?")
     msgs = cliente.llamadas[0]
+    # F6.5.1: un único mensaje system (algunas plantillas de chat rechazan
+    # más de uno), pero el base no se sustituye: ambos bloques van fusionados.
     systems = [m for m in msgs if m["role"] == "system"]
-    assert len(systems) == 2
-    assert systems[0]["content"] == SYSTEM  # base no sustituido
-    assert "Memoria narrativa de campaña" in systems[1]["content"]
-    assert "El pacto" in systems[1]["content"]
+    assert len(systems) == 1
+    assert systems[0]["content"].startswith(SYSTEM)
+    assert "Memoria narrativa de campaña" in systems[0]["content"]
+    assert "El pacto" in systems[0]["content"]
 
 
 def test_sin_memoria_no_anade_bloque_innecesario(tmp_path):
@@ -84,12 +86,14 @@ def test_memoria_aparece_antes_del_mensaje_de_usuario(tmp_path):
     agente.responder("acción del jugador")
     msgs = cliente.llamadas[0]
     roles = [m["role"] for m in msgs]
+    # F6.5.1: la memoria vive dentro del único mensaje system fusionado.
     idx_mem = next(i for i, m in enumerate(msgs)
                    if m["role"] == "system" and "Memoria narrativa" in m["content"])
     idx_user = next(i for i, m in enumerate(msgs)
                     if m["role"] == "user" and m["content"] == "acción del jugador")
     assert idx_mem < idx_user
     assert roles[0] == "system"  # el base sigue primero
+    assert roles.count("system") == 1
 
 
 def test_memoria_presente_en_llamada_inicial_con_tool_call(tmp_path):

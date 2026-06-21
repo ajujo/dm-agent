@@ -127,11 +127,15 @@ def test_campaña_persistente_basica_extremo_a_extremo(tmp_path):
     salida = agente.responder("Continúa desde donde lo dejamos. ¿Qué recuerda Tyr?")
     assert salida
 
-    # 11-12. Los messages incluyen base + memoria (resumen + preparación) antes del usuario.
+    # 11-12. Los messages incluyen base + memoria (resumen + preparación) antes del usuario,
+    # fusionados en un único mensaje system (F6.5.1: algunas plantillas de chat
+    # rechazan más de un mensaje system).
     msgs = cliente_agente.llamadas[0]
     systems = [m for m in msgs if m["role"] == "system"]
-    assert systems[0]["content"] == "SYSTEM-BASE-DM"  # base no sustituido
-    bloque = next(m["content"] for m in systems if "Memoria narrativa de campaña" in m["content"])
+    assert len(systems) == 1
+    assert systems[0]["content"].startswith("SYSTEM-BASE-DM")  # base no sustituido
+    bloque = systems[0]["content"]
+    assert "Memoria narrativa de campaña" in bloque
     assert "encontró una llave oxidada" in bloque          # resumen de cierre
     assert "junto al fuego" in bloque                       # preparación próxima sesión
     idx_mem = next(i for i, m in enumerate(msgs)

@@ -38,6 +38,16 @@ ninguna tool call → se devuelve un mensaje seguro en vez de un turno vacío;
 (c) el usuario pide explícitamente una tool por su nombre API y el modelo no
 la llama de verdad → un reintento corrector una vez, y si sigue sin
 llamarla, un mensaje seguro que no afirma que se ejecutó.
+
+F6.5.1: tras observar en pruebas reales que vLLM rechazaba la petición con
+`ValueError: System message must be at the beginning.` (HTTP 400), se
+confirmó por reproducción directa contra el endpoint que la plantilla de
+chat de ese modelo rechaza **más de un mensaje `system`**, incluso si todos
+van al principio. `system_prompt`, el bloque de memoria narrativa (F4.3) y
+el bloque de contexto operativo (F6.5-B) ya no se envían como mensajes
+`system` separados: `construir_mensajes_llm` los fusiona en un único
+mensaje `system` inicial, y un assert centralizado (`_assert_system_al_principio`)
+garantiza que nunca hay un `system` después del primer mensaje no-system.
 """
 
 from __future__ import annotations
@@ -102,6 +112,45 @@ _MENSAJE_RESPUESTA_VACIA = (
 )
 
 
+def construir_mensajes_llm(
+    system_prompt: str,
+    bloque_memoria: str,
+    bloque_contexto: str,
+    historial: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Construye la lista de `messages` a enviar al LLM con un único mensaje
+    `system` al principio (F6.5.1).
+
+    Algunas plantillas de chat (confirmado con vLLM + Qwen3) rechazan la
+    petición entera si hay más de un mensaje `system`, sin importar si están
+    todos al principio. Por eso `system_prompt`, el bloque de memoria
+    narrativa y el bloque de contexto operativo se fusionan en un solo
+    mensaje `system`, separados por líneas en blanco, en vez de enviarse
+    como mensajes `system` independientes.
+    """
+    partes = [system_prompt]
+    if bloque_memoria:
+        partes.append(bloque_memoria)
+    if bloque_contexto:
+        partes.append(bloque_contexto)
+    messages: list[dict[str, Any]] = [{"role": "system", "content": "\n\n".join(partes)}]
+    messages.extend(historial)
+    _assert_system_al_principio(messages)
+    return messages
+
+
+def _assert_system_al_principio(messages: list[dict[str, Any]]) -> None:
+    """Invariante F6.5.1: ningún mensaje `system` puede aparecer después del
+    primer mensaje no-`system`. Protege contra regresiones futuras que
+    vuelvan a romper el chat template de modelos como vLLM+Qwen3."""
+    visto_no_system = False
+    for m in messages:
+        if m["role"] == "system":
+            assert not visto_no_system, "mensaje system después de un mensaje no-system"
+        else:
+            visto_no_system = True
+
+
 def _tool_mencionada_no_ejecutada(
     entrada_usuario: str, nombres_expuestos: list[str], nombres_ejecutados: set[str]
 ) -> str | None:
@@ -151,26 +200,27 @@ class AgenteDM:
 
         Los eventos `tool_call`/`tool_result` persistidos NO se reinyectan entre
         turnos en esta versión mínima; el round-trip de tools vive solo dentro
-        del turno en curso."""
-        messages: list[dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
-        bloque_memoria = self._bloque_memoria()
-        if bloque_memoria:
-            # Segundo mensaje system: continuidad narrativa, sin sustituir el base.
-            messages.append({"role": "system", "content": bloque_memoria})
-        bloque_contexto = self._bloque_contexto_operativo()
-        if bloque_contexto:
-            # Último mensaje system (F6.5-B): IDs reales activos, lo más cerca
-            # posible del historial de conversación para que pese más.
-            messages.append({"role": "system", "content": bloque_contexto})
+        del turno en curso.
+
+        El system prompt base, el bloque de memoria narrativa (F4.3) y el
+        bloque de contexto operativo (F6.5-B) se fusionan en un único mensaje
+        `system` inicial vía `construir_mensajes_llm` (F6.5.1): algunas
+        plantillas de chat (vLLM+Qwen3) rechazan más de un mensaje `system`."""
+        historial: list[dict[str, Any]] = []
         for ev in self.sesion.historial():
             tipo = ev.get("tipo")
             if tipo == "user":
-                messages.append({"role": "user", "content": ev.get("content", "")})
+                historial.append({"role": "user", "content": ev.get("content", "")})
             elif tipo == "assistant":
                 contenido = ev.get("content")
                 if contenido:
-                    messages.append({"role": "assistant", "content": contenido})
-        return messages
+                    historial.append({"role": "assistant", "content": contenido})
+        return construir_mensajes_llm(
+            self.system_prompt,
+            self._bloque_memoria(),
+            self._bloque_contexto_operativo(),
+            historial,
+        )
 
     def _bloque_memoria(self) -> str:
         """Bloque de memoria narrativa a inyectar, o "" si no procede."""

@@ -427,6 +427,58 @@ inventario, ficha, memoria narrativa, RAG ni streaming.
 
 ---
 
+## F6.5.1 — `system` único: el chat template de vLLM+Qwen3 rechaza más de uno
+
+> Igual que F6.1-F6.5: no es parte de "Fase 6" de creación de mundo.
+> Corrección de un bug crítico encontrado en una prueba manual real con
+> `dm-agent --perfil rapido --nueva --debug`: vLLM rechazaba la petición
+> entera con HTTP 400 (`ValueError: System message must be at the
+> beginning.`), bloqueando *todo* turno de lenguaje natural con contexto
+> operativo (F6.5-B) o memoria narrativa (F4.3) activos. Reproducido de
+> forma aislada contra el endpoint real: el chat template de este modelo
+> rechaza **más de un mensaje `system` en la petición, incluso si todos van
+> al principio** — no es (solo) un problema de orden, sino de cardinalidad.
+
+**Objetivo.** ✅ **Implementada** (commit `fix: keep system messages before
+chat history`). Ningún mensaje `system` puede ir después del primer mensaje
+no-`system`, y como ese chat template tampoco tolera varios `system`
+consecutivos, `system_prompt` + bloque de memoria narrativa + bloque de
+contexto operativo se fusionan en **un único** mensaje `system` inicial.
+**No se tocó** ninguna mecánica de combate, tiradas, daño, ficha, inventario
+ni memoria narrativa: solo el ensamblado de `messages` para el LLM.
+
+- **`construir_mensajes_llm`** (nueva función en `src/dm_agent/nucleo/
+  agente.py`): punto centralizado de construcción de `messages`. Recibe
+  `system_prompt`, `bloque_memoria`, `bloque_contexto` y el historial
+  user/assistant ya traducido, y devuelve siempre `[un único mensaje
+  system, *historial]`. `AgenteDM._messages_base` delega en ella en vez de
+  añadir varios mensajes `system` sueltos.
+- **`_assert_system_al_principio`**: invariante centralizado (`assert`) que
+  recorre los `messages` construidos y falla si encuentra un `system`
+  después del primer mensaje no-`system`. Se ejecuta dentro de
+  `construir_mensajes_llm`, así que cualquier regresión futura que vuelva a
+  intentar inyectar un `system` tardío se detecta inmediatamente, no solo
+  en producción contra el LLM real.
+- El reintento corrector de tool explícita no ejecutada (F6.3-C/F6.5-B)
+  sigue incluyendo los IDs reales activos, pero como texto dentro de un
+  mensaje `user` sintético (igual que antes) — nunca como mensaje `system`
+  adicional, así que no rompe el invariante.
+- El bloque "CONTEXTO OPERATIVO ACTUAL" (F6.5-B) sigue inyectándose en cada
+  turno con los mismos datos e idéntica prohibición de placeholders
+  (`campaña_actual`, `combate_actual`, `personaje_actual`); solo cambia que
+  ahora vive dentro del único mensaje `system`, no en uno propio.
+
+**Archivos.** `src/dm_agent/nucleo/agente.py`.
+
+**Tests.** `tests/test_orden_mensajes_llm.py` (nuevo: contexto operativo
+presente, todos los `system` antes del primer `user`, ningún `system` tras
+`user`/`assistant`/`tool`, el reprompt de tool explícita respeta el orden,
+placeholders siguen prohibidos), `tests/test_agente_memoria.py` y
+`tests/test_campaña_integrada_f4.py` (ajustados: ya no esperan dos mensajes
+`system` separados, sino uno fusionado).
+
+---
+
 ## Fase 6 — Creación de mundo, campaña, aventura
 
 **Objetivo.** Skills `crear-mundo`, `crear-campana`, `crear-aventura`. Migración de `config/tonos/` desde dnd5e.
