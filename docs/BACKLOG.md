@@ -252,6 +252,10 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Estado.** El modelo atacaba sin tirar iniciativa, fuera de turno, o contra enemigos ya derrotados, sin que el agente pudiera advertirle de la anomalía. `combate_atacar_enemigo` y `combate_atacar_personaje` añaden `"avisos": []` al resultado con cuatro comprobaciones: (1) sin iniciativa tirada, (2) fuera del turno actual, (3) contra enemigo ya derrotado, (4) todos los enemigos derrotados. **Decisión: los avisos no bloquean el ataque** — el LLM narra, las herramientas señalizan, el jugador decide. Tests: `tests/test_ataques_combate.py`.
 - **P.** P2 (ergonomía; no bloqueaba el combate, pero dejaba al modelo operar sin feedback sobre el flujo de turnos).
 
+### #F6.5-07 — Coherencia narrativa tras tools de combate — ✅ HECHO (F6.5.3a)
+- **Estado.** El modelo declaraba el combate terminado sin llamar `combate_terminar`, ignoraba los `avisos` de las herramientas, y devolvía respuestas vacías tras ejecutar tools correctamente. Corregido en tres frentes: (A) system prompt prohíbe declarar combate terminado si `estado == "activo"`, (B) system prompt obliga a mencionar `avisos` en la narración, (C) `combate_atacar_personaje` añade `"avisos": []` simétrico con `combate_atacar_enemigo`, (D) fallback enriquecido tras tool ejecutada nombra la tool en el mensaje. Tests: `tests/test_agent_tool_robustness.py`, `tests/test_ataques_combate.py`.
+- **P.** P2 (coherencia narrativa; no bloqueaba el combate, pero dejaba al modelo narrar inconsistencias mecánicas).
+
 ---
 
 ## F6 — Creación de mundo / campaña / aventura

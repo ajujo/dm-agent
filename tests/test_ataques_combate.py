@@ -751,3 +751,92 @@ def test_f652c_avanzar_turno_no_regresion(entorno, monkeypatch):
     assert res.ok
     # El turno avanzó (ya no es pj_tyr).
     assert res.datos["turno_actual"]["participante_id"] != "pj_tyr"
+
+
+# --- F6.5.3a: avisos simétricos en combate_atacar_personaje ------------------
+
+
+def test_f653a_atacar_personaje_sin_iniciativa_genera_aviso(entorno, monkeypatch):
+    """F6.5.3a: atacar_personaje sin iniciativa genera un aviso no bloqueante."""
+    reg, _, _, gestor_estado = entorno
+    _crear_ficha(gestor_estado, ca=14)
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    _mock_tiradas(monkeypatch, 12)  # mod=4 -> total=16 >= ca=14
+    _mock_dano(monkeypatch, 3)
+
+    res = _atacar_personaje(reg, combate_id)
+    assert res.ok
+    assert "avisos" in res.datos
+    assert any("no se ha tirado iniciativa" in a for a in res.datos["avisos"])
+
+
+def test_f653a_atacar_personaje_fuera_de_turno_genera_aviso(entorno, monkeypatch):
+    """F6.5.3a: atacar_personaje fuera del turno del enemigo genera un aviso."""
+    reg, gestor, _, gestor_estado = entorno
+    _crear_ficha(gestor_estado, ca=14)
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    monkeypatch.setattr("dm_agent.herramientas.combate._tirar_d20", lambda mod, semilla: 15)
+    reg.dispatch(
+        "combate.tirar_iniciativa", ctx=None, campaña_id=CAMP, combate_id=combate_id,
+        personaje={"id": "pj_tyr"},
+    )
+    # Iniciativa creada; el turno actual es pj_tyr (índice 0).
+    combate = gestor.cargar(CAMP, combate_id)
+    assert combate.orden_iniciativa[0].participante_id == "pj_tyr"
+
+    _mock_tiradas(monkeypatch, 12)
+    _mock_dano(monkeypatch, 3)
+
+    res = _atacar_personaje(reg, combate_id)
+    assert res.ok
+    assert "avisos" in res.datos
+    assert any("no coincide con el turno actual" in a for a in res.datos["avisos"])
+
+
+def test_f653a_atacar_personaje_en_turno_correcto_sin_aviso(entorno, monkeypatch):
+    """F6.5.3a: atacar_personaje en el turno correcto del enemigo no genera
+    avisos de flujo."""
+    reg, gestor, _, gestor_estado = entorno
+    _crear_ficha(gestor_estado, ca=14)
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    monkeypatch.setattr("dm_agent.herramientas.combate._tirar_d20", lambda mod, semilla: 15)
+    reg.dispatch(
+        "combate.tirar_iniciativa", ctx=None, campaña_id=CAMP, combate_id=combate_id,
+        personaje={"id": "pj_tyr"},
+    )
+    # Avanzamos al turno del enemigo (rata_1).
+    reg.dispatch(
+        "combate.avanzar_turno", ctx=None, campaña_id=CAMP, combate_id=combate_id,
+    )
+    combate = gestor.cargar(CAMP, combate_id)
+    assert combate.orden_iniciativa[
+        combate.indice_turno_actual % len(combate.orden_iniciativa)
+    ].participante_id == "rata_1"
+
+    _mock_tiradas(monkeypatch, 12)
+    _mock_dano(monkeypatch, 3)
+
+    res = _atacar_personaje(reg, combate_id)
+    assert res.ok
+    assert "avisos" in res.datos
+    assert res.datos["avisos"] == []
+
+
+def test_f653a_atacar_personaje_avisos_no_alteran_dano_ni_hp(entorno, monkeypatch):
+    """F6.5.3a: los avisos no alteran la tirada, el daño ni el HP."""
+    reg, _, _, gestor_estado = entorno
+    _crear_ficha(gestor_estado, hp_actual=20, ca=14)
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    _mock_tiradas(monkeypatch, 12)  # total=16 >= ca=14
+    _mock_dano(monkeypatch, 5)
+
+    res = _atacar_personaje(reg, combate_id)
+    assert res.ok
+    assert res.datos["tirada_d20"] == 12
+    assert res.datos["total_ataque"] == 16
+    assert res.datos["impacta"] is True
+    assert res.datos["dano"] == 5
+    assert res.datos["hp_antes"] == 20
+    assert res.datos["hp_despues"] == 15
+    ficha = gestor_estado.cargar_ficha(CAMP, "pj_tyr")
+    assert ficha.hp_actual == 15

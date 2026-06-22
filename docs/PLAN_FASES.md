@@ -500,6 +500,49 @@ señalizan, el jugador decide.
 
 ---
 
+## F6.5.3a — Coherencia narrativa y avisos tras tools de combate
+
+> Igual que F6.5.1-F6.5.2c: no es parte de "Fase 6" de creación de mundo.
+> Corrección de coherencia narrativa detectada durante pruebas manuales:
+> el modelo declaraba el combate terminado sin llamar `combate_terminar`,
+> ignoraba los `avisos` que las herramientas devolvían, y en ocasiones
+> devolvía una respuesta vacía tras ejecutar una tool correctamente.
+
+**Objetivo.** ✅ **Implementada** — Cuatro mejoras de coherencia narrativa,
+ninguna toca mecánica de combate:
+
+- **(A) Prompt: no declarar combate terminado sin tool**
+  (`src/dm_agent/prompts/system_dm_minimo.md`): nueva sección que prohíbe
+  decir "el combate ha terminado" si `combate.estado` sigue siendo
+  `"activo"`. Permite decir "todos los enemigos están derrotados" y exige
+  llamar a `combate_terminar` para cerrar formalmente.
+- **(B) Prompt: mencionar avisos en la narración**
+  (`src/dm_agent/prompts/system_dm_minimo.md`): nueva sección que obliga
+  a integrar los `avisos` del resultado de una tool en la narración, sin
+  ocultarlos ni exagerarlos.
+- **(C) Avisos simétricos en `combate_atacar_personaje`**
+  (`src/dm_agent/herramientas/combate.py`): añade `"avisos": []` con las
+  mismas comprobaciones que `combate_atacar_enemigo` (sin iniciativa, fuera
+  de turno), para que los ataques enemigos también generen advertencias
+  narrativas. El atacante es el enemigo (`enemigo_id`), por lo que el
+  chequeo de turno compara contra `enemigo_id`.
+- **(D) Fallback enriquecido tras tool ejecutada**
+  (`src/dm_agent/nucleo/agente.py`): si el modelo devuelve una respuesta
+  vacía tras ejecutar una tool con éxito, el mensaje fallback nombra la
+  tool que se ejecutó para que el usuario sepa que la acción mecánica
+  ocurrió aunque la narración esté vacía.
+
+**Archivos.** `src/dm_agent/prompts/system_dm_minimo.md` (ampliado),
+`src/dm_agent/herramientas/combate.py` (ampliado),
+`src/dm_agent/nucleo/agente.py` (ampliado).
+
+**Tests.** `tests/test_agent_tool_robustness.py` (6 tests nuevos: prompt
+combat termination, prompt avisos mention, fallback enriquecido con tool,
+fallback original sin tool), `tests/test_ataques_combate.py` (4 tests
+nuevos: avisos en `atacar_personaje`).
+
+---
+
 ## Fase 6 — Creación de mundo, campaña, aventura
 
 **Objetivo.** Skills `crear-mundo`, `crear-campana`, `crear-aventura`. Migración de `config/tonos/` desde dnd5e.

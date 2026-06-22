@@ -120,6 +120,14 @@ _MENSAJE_RESPUESTA_VACIA = (
     "Repite la instrucción de forma más directa o usa una sola herramienta."
 )
 
+# F6.5.3a: fallback enriquecido cuando una tool se ejecutó pero el modelo
+# no generó narración posterior.
+_MENSAJE_RESPUESTA_VACIA_CON_TOOL = (
+    "La herramienta {tool} se ejecutó correctamente, pero el modelo no generó una "
+    "narración posterior. Consulta el resultado anterior o usa /estado, /combate o "
+    "/turno para continuar."
+)
+
 
 def construir_mensajes_llm(
     system_prompt: str,
@@ -347,8 +355,14 @@ class AgenteDM:
                 if not content.strip():
                     if self.debug:
                         print("[debug] respuesta vacía del modelo sin tool calls")
-                    self.sesion.registrar_asistente(_MENSAJE_RESPUESTA_VACIA)
-                    return _MENSAJE_RESPUESTA_VACIA
+                    # F6.5.3a: si se ejecutó una tool, usar fallback enriquecido.
+                    if nombres_tools_ejecutadas:
+                        ultima_tool = list(nombres_tools_ejecutadas)[-1]
+                        mensaje = _MENSAJE_RESPUESTA_VACIA_CON_TOOL.format(tool=ultima_tool)
+                    else:
+                        mensaje = _MENSAJE_RESPUESTA_VACIA
+                    self.sesion.registrar_asistente(mensaje)
+                    return mensaje
 
                 self.sesion.registrar_asistente(content)
                 return content

@@ -75,6 +75,12 @@
 - **Motivo:** el LLM narra; las herramientas señalizan; el jugador decide. Bloquear el ataque rompería la flexibilidad narrativa (teatro de la mente, D17) y obligaría a un estricto seguimiento de turnos que no siempre es deseable en solitario.
 - **Consecuencia:** el ataque se resuelve mecánicamente igual (tirada, daño, HP), pero el resultado incluye avisos que el LLM puede usar para narrar la anomalía ("atacas aunque no es tu turno", "el enemigo ya ha caído", etc.).
 
+### D-COMBATE-07 — ¿Declarar combate terminado sin tool? → **Prohibido sin `combate_terminar`**
+
+- El system prompt prohíbe decir "el combate ha terminado" si `combate.estado` sigue siendo `"activo"`.
+- **Motivo:** el modelo declaraba la victoria narrativa antes de que se cerrara el combate formalmente, dejando estado inconsistente (enemigos derrotados pero combate sin cerrar, sin resumen narrativo de cierre).
+- **Consecuencia:** el LLM puede narrar "todos los enemigos están derrotados" pero debe llamar a `combate_terminar` para cerrar el combate. El prompt también obliga a mencionar los `avisos` de las herramientas en la narración.
+
 ---
 
 ## Notas para Fase 2

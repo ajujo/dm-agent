@@ -1272,6 +1272,22 @@ class _ToolAtacarPersonaje(_ToolCombateBase):
                 ],
             )
 
+        # F6.5.3a: avisos no bloqueantes para ataques fuera del flujo normal.
+        # Simétrico a _ToolAtacarEnemigo: el atacante es el enemigo.
+        avisos: list[str] = []
+
+        if not combate.orden_iniciativa:
+            avisos.append("no se ha tirado iniciativa")
+        elif combate.orden_iniciativa:
+            entrada_actual = combate.orden_iniciativa[
+                combate.indice_turno_actual % len(combate.orden_iniciativa)
+            ]
+            if entrada_actual.participante_id != enemigo_id:
+                avisos.append(
+                    f"el atacante '{enemigo_id}' no coincide con el turno actual "
+                    f"'{entrada_actual.participante_id}'"
+                )
+
         if not self.gestor_estado.existe_campaña(campaña_id):
             return ResultadoHerramienta(ok=False, errores=[f"campaña no existe: {campaña_id!r}"])
         try:
@@ -1385,6 +1401,8 @@ class _ToolAtacarPersonaje(_ToolCombateBase):
                 "hp_despues": hp_despues,
                 "estado_vital": estado_vital(hp_despues, ficha.hp_max),
                 "motivo_modificador": motivo_modificador,
+                # F6.5.3a: avisos no bloqueantes (simétrico a _ToolAtacarEnemigo).
+                "avisos": avisos,
             },
         )
 

@@ -422,3 +422,74 @@ def test_debug_informa_pseudo_call_estilo_funcion(tmp_path, capsys):
 
     salida = capsys.readouterr().out
     assert "[debug] posible tool call simulada en texto" in salida
+
+
+# --- F6.5.3a: reglas del prompt y fallback enriquecido -----------------------
+
+
+def test_prompt_contiene_regla_no_declarar_combate_terminado_sin_tool(tmp_path):
+    """F6.5.3a: el prompt del DM contiene la regla de no declarar el combate
+    terminado sin llamar a combate_terminar."""
+    import pathlib
+
+    prompt_path = pathlib.Path(__file__).resolve().parent.parent / "src" / "dm_agent" / "prompts" / "system_dm_minimo.md"
+    contenido = prompt_path.read_text(encoding="utf-8")
+
+    assert "no declarar terminado sin tool" in contenido.lower() or "no digas" in contenido.lower()
+    assert "combate_terminar" in contenido
+
+
+def test_prompt_contiene_regla_mencionar_avisos(tmp_path):
+    """F6.5.3a: el prompt del DM contiene la regla de mencionar avisos de tools."""
+    import pathlib
+
+    prompt_path = pathlib.Path(__file__).resolve().parent.parent / "src" / "dm_agent" / "prompts" / "system_dm_minimo.md"
+    contenido = prompt_path.read_text(encoding="utf-8")
+
+    assert "avisos" in contenido
+    assert "mencionar" in contenido.lower() or "menciona" in contenido.lower()
+
+
+def test_respuesta_vacia_tras_tool_produce_fallback_enriquecido(tmp_path):
+    """F6.5.3a: si una tool se ejecutó pero el modelo no genera narración
+    posterior, el fallback menciona el nombre de la tool."""
+    registro, tools = _registro("combate.atacar_enemigo")
+    cliente = _ClienteSecuencia(
+        [
+            _resp(
+                tool_calls=[
+                    _tc(
+                        "call-1",
+                        "combate_atacar_enemigo",
+                        {"campaña_id": "campana_demo", "combate_id": "combate_1"},
+                    )
+                ]
+            ),
+            _resp(content=""),  # El modelo no genera narración tras el resultado de tool.
+        ]
+    )
+    sesion = Sesion.crear(tmp_path / "sesiones", id="s16")
+    agente = AgenteDM(cliente, registro, sesion, system_prompt="SYSTEM-BASE-DM")
+
+    salida = agente.responder("Ataca al enemigo.")
+
+    assert "combate_atacar_enemigo" in salida
+    assert "se ejecutó correctamente" in salida
+    # La tool real se ejecutó una vez.
+    assert tools["combate.atacar_enemigo"].contador == 1
+    # Se hicieron 2 llamadas al LLM: tool call + respuesta vacía.
+    assert len(cliente.llamadas) == 2
+
+
+def test_respuesta_vacia_sin_tool_mantiene_fallback_original(tmp_path):
+    """F6.5.3a: si no se ejecutó ninguna tool, el fallback sigue siendo el
+    mensaje original (no el enriquecido)."""
+    cliente = _ClienteSecuencia([_resp(content="")])
+    sesion = Sesion.crear(tmp_path / "sesiones", id="s17")
+    agente = AgenteDM(cliente, RegistroHerramientas(), sesion, system_prompt="SYSTEM-BASE-DM")
+
+    salida = agente.responder("Continúa la escena.")
+
+    assert salida == _MENSAJE_RESPUESTA_VACIA
+    assert "se ejecutó correctamente" not in salida
+    assert len(cliente.llamadas) == 1
