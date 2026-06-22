@@ -110,12 +110,69 @@ def test_detecta_tool_call_simulada_en_tool_call_tag():
     assert _contiene_tool_call_simulada(texto)
 
 
+def test_detecta_pseudo_call_estilo_funcion():
+    """F6.5.2a: combate_atacar(campaña_id="campana_demo", personaje_id="tyr")"""
+    texto = 'combate_atacar(campaña_id="campana_demo", personaje_id="tyr")'
+    assert _contiene_tool_call_simulada(texto)
+
+
+def test_detecta_pseudo_call_estilo_funcion_combate_atacar_enemigo():
+    """F6.5.2a: combate_atacar_enemigo(campaña_id="campana_demo", combate_id="combate_x")"""
+    texto = 'combate_atacar_enemigo(campaña_id="campana_demo", combate_id="combate_x")'
+    assert _contiene_tool_call_simulada(texto)
+
+
+def test_detecta_pseudo_call_estilo_funcion_ficha_leer():
+    """F6.5.2a: ficha_leer(campaña_id="campana_demo", personaje_id="tyr")"""
+    texto = 'ficha_leer(campaña_id="campana_demo", personaje_id="tyr")'
+    assert _contiene_tool_call_simulada(texto)
+
+
+def test_detecta_pseudo_call_estilo_funcion_genérico():
+    """F6.5.2a: tool_name(arg="value")"""
+    texto = 'tool_name(arg="value")'
+    assert _contiene_tool_call_simulada(texto)
+
+
+def test_detecta_pseudo_call_estilo_funcion_con_valores_no_cotados():
+    """F6.5.2a: nombre_funcion(clave=valor_sin_comillas)"""
+    texto = "ficha_actualizar(personaje_id=tyr, nivel=5)"
+    assert _contiene_tool_call_simulada(texto)
+
+
+def test_detecta_pseudo_call_estilo_funcion_con_comillas_simples():
+    """F6.5.2a: nombre_funcion(clave='valor')"""
+    texto = "ficha_leer(campaña_id='campana_demo', personaje_id='tyr')"
+    assert _contiene_tool_call_simulada(texto)
+
+
+def test_detecta_pseudo_call_estilo_funcion_envuelta_en_backticks():
+    """F6.5.2a: `combate_atacar(campaña_id="campana_demo", personaje_id="tyr")`"""
+    texto = '`combate_atacar(campaña_id="campana_demo", personaje_id="tyr")`'
+    assert _contiene_tool_call_simulada(texto)
+
+
+def test_detecta_pseudo_call_estilo_funcion_en_bloque_multilinea():
+    """F6.5.2a: pseudo-call estilo función dentro de un bloque de texto más largo."""
+    texto = (
+        "Voy a atacar a la rata:\n"
+        'combate_atacar(campaña_id="campana_demo", personaje_id="tyr", combate_id="combate_1", objetivo_id="rata_1")\n'
+        "Espero el resultado."
+    )
+    assert _contiene_tool_call_simulada(texto)
+
+
 def test_no_marca_json_narrativo_normal():
     casos = [
         "Tyr entra en la taberna y pide una cerveza.",
         '{"escena": "sotano", "enemigos": 2}',
         "El personaje se llama Tyr; tiene un arguments de pelea complicado con el tabernero.",
         "Tyr saca su herramienta favorita: una palanca de hierro.",
+        # F6.5.2a: narrativa normal sin patrón clave=valor no debe disparar.
+        "Tyr gira sobre sí mismo y ataca con la espada larga.",
+        "El guerrero desenvaina su espada y carga contra el orco.",
+        "La rata huye por el pasillo oscuro.",
+        "Tyr usa su habilidad de concentración para mantener el hechizo.",
     ]
     for texto in casos:
         assert not _contiene_tool_call_simulada(texto), texto
@@ -127,6 +184,12 @@ def test_mensaje_correctivo_prohibe_json_y_xml():
     assert "json" in mensaje
     assert '<call:name="...">' in mensaje
     assert "<tool_call>" in mensaje
+
+
+def test_mensaje_correctivo_prohibe_estilo_funcion():
+    """F6.5.2a: el reprompt debe mencionar llamadas estilo función."""
+    mensaje = _MENSAJE_CORRECTIVO_TOOL_SIMULADA
+    assert "nombre_funcion(clave=" in mensaje
 
 
 # --- Parte F.6: el reintento automático ocurre como máximo una vez por turno ---------------

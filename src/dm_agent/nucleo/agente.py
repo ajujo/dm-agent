@@ -48,6 +48,13 @@ el bloque de contexto operativo (F6.5-B) ya no se envían como mensajes
 `system` separados: `construir_mensajes_llm` los fusiona en un único
 mensaje `system` inicial, y un assert centralizado (`_assert_system_al_principio`)
 garantiza que nunca hay un `system` después del primer mensaje no-system.
+
+F6.5.2a: QA post-F6.5.1 detectó un nuevo formato de pseudo-tool-call que no
+estaba siendo detectado: llamadas estilo función con kwargs, por ejemplo
+`combate_atacar(campaña_id="campana_demo", personaje_id="tyr")`.
+`_contiene_tool_call_simulada` se amplía para reconocer también este patrón
+(nombre + paréntesis + al menos un `clave=valor`), con la misma política:
+solo detectar y avisar/reintentar, nunca parsear ni ejecutar.
 """
 
 from __future__ import annotations
@@ -71,7 +78,8 @@ _PATRON_TOOL_CALL_SIMULADA = re.compile(
     r"|<call:param\s*="
     r"|</call:>"
     r"|<tool_call\b"
-    r"|<tool>",
+    r"|<tool>"
+    r"|[\wñáéíóúÑ]+\([^)]*\b\w+\s*=\s*(?:\"[^\"]*\"|\'[^\']*\'|[^\s,)]+)",
     re.DOTALL,
 )
 
@@ -79,7 +87,8 @@ _MENSAJE_CORRECTIVO_TOOL_SIMULADA = (
     "Has escrito una llamada a herramienta como texto. Eso está prohibido.\n\n"
     "No escribas JSON de tool calls.\n"
     'No escribas XML/pseudo-calls como <call:name="...">.\n'
-    "No escribas <tool_call> ni formatos similares.\n\n"
+    "No escribas <tool_call> ni formatos similares.\n"
+    "No escribas llamadas estilo función como nombre_funcion(clave=\"valor\").\n\n"
     "Si necesitas usar una herramienta, debes llamar a la tool real mediante el sistema "
     "de tools.\n"
     "Reintenta ahora usando una tool call real o responde que no puedes."
@@ -87,14 +96,14 @@ _MENSAJE_CORRECTIVO_TOOL_SIMULADA = (
 
 
 def _contiene_tool_call_simulada(texto: str) -> bool:
-    """Detecta una tool call simulada como texto: JSON tipo {"name": ..., "arguments": ...}
-    o XML/pseudo-call tipo <call:name="...">, <call:param="...">, </call:>, <tool_call>,
-    <tool>.
+    """Detecta una tool call simulada como texto: JSON tipo {"name": ..., "arguments": ...},
+    XML/pseudo-call tipo <call:name="...">, <call:param="...">, </call:>, <tool_call>, <tool>,
+    o llamadas estilo función como nombre_funcion(clave="valor", otra=123).
 
     Deliberadamente no intenta parsear ni ejecutar ese contenido: solo lo
-    detecta para poder avisar/reintentar. Un JSON narrativo normal (sin las
-    claves "name"+"arguments" juntas, ni esas etiquetas) no debe disparar
-    esto.
+    detecta para poder avisar/reintentar. Texto narrativo normal (sin las
+    claves "name"+"arguments" juntas, sin esas etiquetas, sin patrón
+    nombre(clave=valor)) no debe disparar esto.
     """
     return bool(_PATRON_TOOL_CALL_SIMULADA.search(texto))
 

@@ -13,6 +13,9 @@ Cubre:
   contrario).
 - Ninguno de estos casos parsea ni ejecuta JSON/XML simulado: la prioridad
   de F6.1/F6.1.1 sobre pseudo-calls se mantiene intacta.
+- F6.5.2a: el detector de pseudo-tool-calls también reconoce llamadas estilo
+  función con kwargs (nombre_funcion(clave="valor")) y activa el reintento
+  correctivo sin parsear ni ejecutar la pseudo-call.
 """
 
 from dm_agent.herramientas.base import ResultadoHerramienta
@@ -318,3 +321,104 @@ def test_simulada_tiene_prioridad_y_no_se_parsea_ni_ejecuta(tmp_path):
     assert salida == simulada
     assert tools["combate.resolver_reaccion"].contador == 0
     assert len(cliente.llamadas) == 2
+
+
+# --- F6.5.2a: pseudo-tool-calls estilo función con kwargs --------------------
+
+
+def test_detecta_pseudo_call_estilo_funcion_y_activa_reintento(tmp_path):
+    """F6.5.2a: combate_atacar(campaña_id="campana_demo", personaje_id="tyr")
+    debe detectarse como tool call simulada y activar el reintento correctivo."""
+    registro, tools = _registro("combate.atacar_enemigo")
+    simulada = 'combate_atacar(campaña_id="campana_demo", personaje_id="tyr", combate_id="combate_1", objetivo_id="rata_1")'
+    cliente = _ClienteSecuencia(
+        [
+            _resp(content=simulada),
+            _resp(content="Tyr ataca a la rata con su espada."),
+        ]
+    )
+    sesion = Sesion.crear(tmp_path / "sesiones", id="s11")
+    agente = AgenteDM(cliente, registro, sesion, system_prompt="SYSTEM-BASE-DM")
+
+    salida = agente.responder("Ataca a la rata.")
+
+    # El reintento se activa: la segunda respuesta del modelo es la que se devuelve.
+    assert salida == "Tyr ataca a la rata con su espada."
+    # La pseudo-call NO se ejecutó como herramienta real.
+    assert tools["combate.atacar_enemigo"].contador == 0
+    # Se hicieron 2 llamadas al LLM: original + reintento.
+    assert len(cliente.llamadas) == 2
+    # El mensaje correctivo se inyectó como turno user antes del reintento.
+    segunda_llamada = cliente.llamadas[1]
+    assert any(
+        m["role"] == "user" and "prohibido" in m["content"].lower()
+        for m in segunda_llamada
+    )
+
+
+def test_pseudo_call_estilo_funcion_no_se_ejecuta_como_herramienta_real(tmp_path):
+    """F6.5.2a: la pseudo-call estilo función no se parsea ni se ejecuta como
+    tool real, incluso si el nombre coincide con una tool registrada."""
+    registro, tools = _registro("combate.atacar_enemigo")
+    simulada = 'combate_atacar_enemigo(campaña_id="campana_demo", combate_id="combate_x")'
+    cliente = _ClienteSecuencia([_resp(content=simulada), _resp(content=simulada)])
+    sesion = Sesion.crear(tmp_path / "sesiones", id="s12")
+    agente = AgenteDM(cliente, registro, sesion, system_prompt="SYSTEM-BASE-DM")
+
+    salida = agente.responder("Ataca al enemigo.")
+
+    # Tras reintento fallido, se devuelve la respuesta simulada tal cual.
+    assert salida == simulada
+    # La tool real NUNCA se ejecutó.
+    assert tools["combate.atacar_enemigo"].contador == 0
+
+
+def test_pseudo_call_estilo_funcion_envuelta_en_backticks(tmp_path):
+    """F6.5.2a: `combate_atacar(campaña_id="campana_demo", personaje_id="tyr")`
+    envuelta en backticks también se detecta."""
+    registro, tools = _registro("combate.atacar_enemigo")
+    simulada = '`combate_atacar(campaña_id="campana_demo", personaje_id="tyr")`'
+    cliente = _ClienteSecuencia(
+        [
+            _resp(content=simulada),
+            _resp(content="Ataque resuelto."),
+        ]
+    )
+    sesion = Sesion.crear(tmp_path / "sesiones", id="s13")
+    agente = AgenteDM(cliente, registro, sesion, system_prompt="SYSTEM-BASE-DM")
+
+    salida = agente.responder("Ataca.")
+
+    assert salida == "Ataque resuelto."
+    assert tools["combate.atacar_enemigo"].contador == 0
+    assert len(cliente.llamadas) == 2
+
+
+def test_narrativa_normal_no_dispara_detector_estilo_funcion(tmp_path):
+    """F6.5.2a: una frase narrativa sin patrón clave=valor no activa el
+    detector de pseudo-tool-calls estilo función."""
+    cliente = _ClienteSecuencia(
+        [_resp(content="Tyr gira sobre sí mismo y ataca con la espada larga.")]
+    )
+    sesion = Sesion.crear(tmp_path / "sesiones", id="s14")
+    agente = AgenteDM(cliente, RegistroHerramientas(), sesion, system_prompt="SYSTEM-BASE-DM")
+
+    salida = agente.responder("Describe el ataque de Tyr.")
+
+    assert salida == "Tyr gira sobre sí mismo y ataca con la espada larga."
+    # Solo una llamada al LLM: no se activó ningún reintento.
+    assert len(cliente.llamadas) == 1
+
+
+def test_debug_informa_pseudo_call_estilo_funcion(tmp_path, capsys):
+    """F6.5.2a: en modo debug, se imprime el aviso de tool call simulada."""
+    registro, _tools = _registro("combate.atacar_enemigo")
+    simulada = 'combate_atacar(campaña_id="campana_demo", personaje_id="tyr")'
+    cliente = _ClienteSecuencia([_resp(content=simulada), _resp(content=simulada)])
+    sesion = Sesion.crear(tmp_path / "sesiones", id="s15")
+    agente = AgenteDM(cliente, registro, sesion, system_prompt="SYSTEM-BASE-DM", debug=True)
+
+    agente.responder("Ataca a la rata.")
+
+    salida = capsys.readouterr().out
+    assert "[debug] posible tool call simulada en texto" in salida
