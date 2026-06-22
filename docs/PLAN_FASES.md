@@ -479,6 +479,27 @@ placeholders siguen prohibidos), `tests/test_agente_memoria.py` y
 
 ---
 
+## F6.5.2c — Avisos no bloqueantes al atacar fuera del flujo normal
+
+> Igual que F6.5.1-F6.5.2b: no es parte de "Fase 6" de creación de mundo.
+> Corrección de fricción detectada durante pruebas manuales: el modelo
+> atacaba sin tirar iniciativa, fuera de turno, o contra enemigos ya
+> derrotados, sin que el agente pudiera advertirle de la anomalía.
+
+**Objetivo.** ✅ **Implementada** — Añadir `"avisos": []` al resultado de
+`combate_atacar_enemigo` y `combate_atacar_personaje` con advertencias
+no bloqueantes cuando el ataque ocurre fuera del flujo normal de combate:
+(1) sin iniciativa tirada, (2) fuera del turno actual, (3) contra enemigo
+ya derrotado, (4) cuando todos los enemigos están derrotados. **Decisión:
+los avisos no bloquean el ataque** — el LLM narra, las herramientas
+señalizan, el jugador decide.
+
+**Archivos.** `src/dm_agent/herramientas/combate.py` (ampliado).
+
+**Tests.** `tests/test_ataques_combate.py` (ampliado, 8 tests nuevos).
+
+---
+
 ## Fase 6 — Creación de mundo, campaña, aventura
 
 **Objetivo.** Skills `crear-mundo`, `crear-campana`, `crear-aventura`. Migración de `config/tonos/` desde dnd5e.

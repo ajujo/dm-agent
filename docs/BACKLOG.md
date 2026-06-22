@@ -248,6 +248,10 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 - **Pendiente:** edición/corrección estructurada de `AccionTurno` (tipo `correccion` como convención documentada, no como campo validado) y comando `/corregir`, si en el futuro la fricción lo justifica.
 - **P.** P2.
 
+### #F6.5-06 — Avisos no bloqueantes al atacar fuera del flujo normal — ✅ HECHO (F6.5.2c)
+- **Estado.** El modelo atacaba sin tirar iniciativa, fuera de turno, o contra enemigos ya derrotados, sin que el agente pudiera advertirle de la anomalía. `combate_atacar_enemigo` y `combate_atacar_personaje` añaden `"avisos": []` al resultado con cuatro comprobaciones: (1) sin iniciativa tirada, (2) fuera del turno actual, (3) contra enemigo ya derrotado, (4) todos los enemigos derrotados. **Decisión: los avisos no bloquean el ataque** — el LLM narra, las herramientas señalizan, el jugador decide. Tests: `tests/test_ataques_combate.py`.
+- **P.** P2 (ergonomía; no bloqueaba el combate, pero dejaba al modelo operar sin feedback sobre el flujo de turnos).
+
 ---
 
 ## F6 — Creación de mundo / campaña / aventura

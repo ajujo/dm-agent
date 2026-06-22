@@ -1038,6 +1038,26 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
                 ok=False, errores=[f"enemigo no existe en este combate: {enemigo_id!r}"]
             )
 
+        # F6.5.2c: avisos no bloqueantes para ataques fuera del flujo normal.
+        # No bloquean el ataque: se resuelve igualmente por flexibilidad narrativa.
+        avisos: list[str] = []
+
+        if not combate.orden_iniciativa:
+            avisos.append("no se ha tirado iniciativa")
+        elif combate.orden_iniciativa:
+            # Hay iniciativa: verificamos si es el turno del atacante.
+            entrada_actual = combate.orden_iniciativa[combate.indice_turno_actual % len(combate.orden_iniciativa)]
+            if entrada_actual.participante_id != atacante_id:
+                avisos.append(
+                    f"el atacante '{atacante_id}' no coincide con el turno actual '{entrada_actual.participante_id}'"
+                )
+
+        if _enemigo_derrotado(enemigo):
+            avisos.append(f"el enemigo objetivo '{enemigo_id}' ya está derrotado")
+
+        if _todos_los_enemigos_derrotados(combate):
+            avisos.append("todos los enemigos están derrotados; debería terminar el combate")
+
         modificador, error_mod = _validar_modificador_ataque(args.get("modificador_ataque"))
         if error_mod:
             return ResultadoHerramienta(ok=False, errores=[error_mod])
@@ -1130,6 +1150,12 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
             ),
         )
         todos_derrotados = _todos_los_enemigos_derrotados(combate_actualizado)
+        # F6.5.2c: si tras el ataque todos los enemigos están derrotados,
+        # se añade el aviso (puede que ya estuviera antes del ataque).
+        if todos_derrotados and not any(
+            "todos los enemigos están derrotados" in a for a in avisos
+        ):
+            avisos.append("todos los enemigos están derrotados; debería terminar el combate")
         return ResultadoHerramienta(
             ok=True,
             datos={
@@ -1155,6 +1181,8 @@ class _ToolAtacarEnemigo(_ToolCombateBase):
                 # F6.5-E: solo señaliza (no termina el combate automáticamente).
                 "todos_los_enemigos_derrotados": todos_derrotados,
                 "deberia_terminar_combate": todos_derrotados,
+                # F6.5.2c: avisos no bloqueantes para ataques fuera del flujo normal.
+                "avisos": avisos,
                 "combate": combate_actualizado.model_dump(mode="json"),
             },
         )

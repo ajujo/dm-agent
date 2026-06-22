@@ -69,6 +69,12 @@
 
 > ⚠️ No se migrará contenido SRD, compendio, monstruos, conjuros ni material externo hasta que exista `compendio/LICENSE` y se confirme la licencia aplicable.
 
+### D-COMBATE-06 — Avisos no bloqueantes vs. bloqueo estricto de flujo de combate → **Avisos no bloqueantes**
+
+- `combate_atacar_enemigo` y `combate_atacar_personaje` emiten `"avisos": []` cuando el ataque ocurre fuera del flujo normal (sin iniciativa, fuera de turno, contra enemigo derrotado, todos derrotados).
+- **Motivo:** el LLM narra; las herramientas señalizan; el jugador decide. Bloquear el ataque rompería la flexibilidad narrativa (teatro de la mente, D17) y obligaría a un estricto seguimiento de turnos que no siempre es deseable en solitario.
+- **Consecuencia:** el ataque se resuelve mecánicamente igual (tirada, daño, HP), pero el resultado incluye avisos que el LLM puede usar para narrar la anomalía ("atacas aunque no es tu turno", "el enemigo ya ha caído", etc.).
+
 ---
 
 ## Notas para Fase 2

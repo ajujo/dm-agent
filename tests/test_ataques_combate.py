@@ -595,3 +595,159 @@ def test_esquemas_disponibles_contienen_tools_ataque(entorno):
     reg, _, _, _ = entorno
     nombres = {e["function"]["name"] for e in reg.esquemas_disponibles(ctx=None)}
     assert {"combate_atacar_enemigo", "combate_atacar_personaje"} <= nombres
+
+
+# --- F6.5.2c: avisos no bloqueantes al atacar fuera del flujo normal ----------
+
+
+def test_f652c_ataque_sin_iniciativa_devuelve_aviso(entorno, monkeypatch):
+    """F6.5.2c: atacar sin iniciativa tirada devuelve ok=True + aviso."""
+    reg, _, _, _ = entorno
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    _mock_tiradas(monkeypatch, 10)
+    _mock_dano(monkeypatch, 4)
+
+    res = _atacar_enemigo(reg, combate_id)
+    assert res.ok
+    assert res.datos["impacta"] is True
+    assert res.datos["avisos"] == ["no se ha tirado iniciativa"]
+
+
+def test_f652c_ataque_fuera_de_turno_devuelve_aviso(entorno, monkeypatch):
+    """F6.5.2c: atacar fuera del turno actual devuelve ok=True + aviso."""
+    reg, gestor, _, _ = entorno
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    # Tirar iniciativa: pj_tyr=15, rata_1=8 → orden: pj_tyr, rata_1
+    reg.dispatch(
+        "combate.tirar_iniciativa", ctx=None, campaña_id=CAMP, combate_id=combate_id,
+        personaje={"id": "pj_tyr"},
+        semilla=42,
+    )
+    # Avanzar turno para que sea el turno de rata_1.
+    reg.dispatch(
+        "combate.avanzar_turno", ctx=None, campaña_id=CAMP, combate_id=combate_id,
+    )
+    _mock_tiradas(monkeypatch, 10)
+    _mock_dano(monkeypatch, 4)
+
+    # pj_tyr ataca aunque es turno de rata_1.
+    res = _atacar_enemigo(reg, combate_id)
+    assert res.ok
+    assert res.datos["impacta"] is True
+    assert any("no coincide con el turno actual" in a for a in res.datos["avisos"])
+
+
+def test_f652c_ataque_en_turno_correcto_aviso_vacio(entorno, monkeypatch):
+    """F6.5.2c: atacar en turno correcto (con iniciativa) devuelve avisos vacíos
+    si no hay otro problema."""
+    reg, gestor, _, _ = entorno
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    # Tirar iniciativa: pj_tyr primero.
+    reg.dispatch(
+        "combate.tirar_iniciativa", ctx=None, campaña_id=CAMP, combate_id=combate_id,
+        personaje={"id": "pj_tyr"},
+        semilla=42,
+    )
+    # El primer turno es pj_tyr (mayor iniciativa).
+    _mock_tiradas(monkeypatch, 10)
+    _mock_dano(monkeypatch, 4)
+
+    res = _atacar_enemigo(reg, combate_id)
+    assert res.ok
+    assert res.datos["impacta"] is True
+    # No hay avisos: es turno correcto, enemigo activo, no todos derrotados.
+    assert res.datos["avisos"] == []
+
+
+def test_f652c_ataque_a_enemigo_derrotado_devuelve_aviso(entorno, monkeypatch):
+    """F6.5.2c: atacar a enemigo ya derrotado devuelve ok=True + aviso."""
+    reg, _, _, _ = entorno
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    # Derrotar rata_1 primero.
+    reg.dispatch(
+        "combate.daño_enemigo",
+        ctx=None,
+        campaña_id=CAMP,
+        combate_id=combate_id,
+        enemigo_id="rata_1",
+        cantidad=7,
+    )
+    _mock_tiradas(monkeypatch, 10)
+    _mock_dano(monkeypatch, 4)
+
+    res = _atacar_enemigo(reg, combate_id)
+    assert res.ok
+    # El ataque se resuelve igualmente (no bloqueado).
+    assert any("ya está derrotado" in a for a in res.datos["avisos"])
+
+
+def test_f652c_todos_enemigos_derrotados_devuelve_aviso(entorno, monkeypatch):
+    """F6.5.2c: atacar cuando todos los enemigos están derrotados devuelve aviso
+    de que debería terminar el combate."""
+    reg, _, _, _ = entorno
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    # Derrotar rata_1 (único enemigo).
+    reg.dispatch(
+        "combate.daño_enemigo",
+        ctx=None,
+        campaña_id=CAMP,
+        combate_id=combate_id,
+        enemigo_id="rata_1",
+        cantidad=7,
+    )
+    _mock_tiradas(monkeypatch, 10)
+    _mock_dano(monkeypatch, 4)
+
+    res = _atacar_enemigo(reg, combate_id)
+    assert res.ok
+    assert any("debería terminar el combate" in a for a in res.datos["avisos"])
+
+
+def test_f652c_ataque_derrota_ultimo_enemigo_aviso_y_señales(entorno, monkeypatch):
+    """F6.5.2c: el ataque que derrota al último enemigo añade el aviso de
+    'todos los enemigos están derrotados' y mantiene las señales existentes."""
+    reg, _, _, _ = entorno
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    _mock_tiradas(monkeypatch, 10)
+    _mock_dano(monkeypatch, 7)  # hp_max=7 → derrota
+
+    res = _atacar_enemigo(reg, combate_id)
+    assert res.ok
+    assert res.datos["hp_despues"] == 0
+    assert res.datos["todos_los_enemigos_derrotados"] is True
+    assert res.datos["deberia_terminar_combate"] is True
+    assert any("debería terminar el combate" in a for a in res.datos["avisos"])
+
+
+def test_f652c_tirada_dano_hp_no_cambian(entorno, monkeypatch):
+    """F6.5.2c: los avisos no alteran la tirada, el daño ni el HP."""
+    reg, _, _, _ = entorno
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    _mock_tiradas(monkeypatch, 10)  # total=15 >= ca=12
+    _mock_dano(monkeypatch, 4)
+
+    res = _atacar_enemigo(reg, combate_id)
+    assert res.ok
+    assert res.datos["tirada_d20"] == 10
+    assert res.datos["total_ataque"] == 15
+    assert res.datos["impacta"] is True
+    assert res.datos["dano"] == 4
+    assert res.datos["hp_antes"] == 7
+    assert res.datos["hp_despues"] == 3
+
+
+def test_f652c_avanzar_turno_no_regresion(entorno, monkeypatch):
+    """F6.5.2c: combate_avanzar_turno no se ve afectado por los avisos."""
+    reg, _, _, _ = entorno
+    combate_id = _iniciar(reg).datos["combate"]["id"]
+    reg.dispatch(
+        "combate.tirar_iniciativa", ctx=None, campaña_id=CAMP, combate_id=combate_id,
+        personaje={"id": "pj_tyr"},
+        semilla=42,
+    )
+    res = reg.dispatch(
+        "combate.avanzar_turno", ctx=None, campaña_id=CAMP, combate_id=combate_id,
+    )
+    assert res.ok
+    # El turno avanzó (ya no es pj_tyr).
+    assert res.datos["turno_actual"]["participante_id"] != "pj_tyr"
