@@ -201,3 +201,117 @@ def test_agente_mensaje_ambiguo_expone_todas_las_tools_registradas(tmp_path):
 
     nombres = {t["function"]["name"] for t in cliente.tools_recibidas[0]}
     assert len(nombres) == len(registro)
+
+
+# --- F6.5.2b: reducir ruido de ficha/inventario en ataques típicos ----------
+
+
+def test_f652b_ataque_con_nombre_y_arma_no_expone_ficha_ni_inventario():
+    """F6.5.2b: 'Tyr ataca a rata_1 con su espada larga' no debe exponer
+    tools de ficha (por 'Tyr') ni de inventario (por 'espada')."""
+    sel = seleccionar_tools_para_turno(
+        'Tyr ataca a rata_1 con su espada larga. Usa la herramienta correspondiente. '
+        'No avances turno automáticamente.'
+    )
+    assert sel is not None
+    # Sí expone tools de ataque.
+    assert "combate_atacar_enemigo" in sel
+    assert "combate_estado" in sel
+    # No expone tools de ficha arrastradas por el nombre "Tyr".
+    assert "ficha_guardar" not in sel
+    assert "ficha_validar" not in sel
+    assert "ficha_actualizar" not in sel
+    assert "ficha_listar" not in sel
+    assert "hp_xp_consultar_estado_vital" not in sel
+    # No expone tools de inventario arrastradas por "espada".
+    assert "inventario_anadir" not in sel
+    assert "inventario_quitar" not in sel
+    assert "inventario_equipar" not in sel
+    assert "inventario_desequipar" not in sel
+    assert "inventario_listar" not in sel
+
+
+def test_f652b_ataque_con_nombre_y_arma_conjunto_reducido():
+    """F6.5.2b: el conjunto de tools para un ataque típico debe ser pequeño."""
+    sel = seleccionar_tools_para_turno(
+        'Tyr ataca a rata_1 con su espada larga. No avances turno.'
+    )
+    assert sel is not None
+    # El conjunto debe ser significativamente menor que 15 tools.
+    assert len(sel) < 12
+
+
+def test_f652b_equipa_espada_si_expone_inventario():
+    """F6.5.2b: 'equipa la espada larga' SÍ expone inventario (acción explícita)."""
+    sel = seleccionar_tools_para_turno("Equipa la espada larga.")
+    assert sel is not None
+    assert "inventario_equipar" in sel
+    assert "inventario_listar" in sel
+
+
+def test_f652b_lee_ficha_de_tyr_si_expone_ficha():
+    """F6.5.2b: 'lee la ficha de Tyr' SÍ expone ficha (acción explícita)."""
+    sel = seleccionar_tools_para_turno("Lee la ficha de Tyr.")
+    assert sel is not None
+    assert "ficha_leer" in sel
+
+
+def test_f652b_actualiza_ficha_si_expone_ficha():
+    """F6.5.2b: 'actualiza la ficha' SÍ expone ficha (acción explícita)."""
+    sel = seleccionar_tools_para_turno("Actualiza la ficha de Tyr.")
+    assert sel is not None
+    assert "ficha_actualizar" in sel
+
+
+def test_f652b_ataca_al_enemigo_activo_expone_ataque():
+    """F6.5.2b: 'Ataca al enemigo activo' sigue exponiendo tools de ataque."""
+    sel = seleccionar_tools_para_turno("Ataca al enemigo activo.")
+    assert sel is not None
+    assert "combate_atacar_enemigo" in sel
+    assert "combate_estado" in sel
+
+
+def test_f652b_no_regresion_reacciones():
+    """F6.5.2b: selección de reacciones no se ve afectada."""
+    sel = seleccionar_tools_para_turno("Propón una reacción para la rata.")
+    assert sel is not None
+    assert "combate_proponer_reaccion" in sel
+    assert "combate_estado" in sel
+
+
+def test_f652b_no_regresion_iniciativa():
+    """F6.5.2b: selección de iniciativa/turno no se ve afectada."""
+    sel = seleccionar_tools_para_turno("Tira iniciativa para todos.")
+    assert sel is not None
+    assert "combate_tirar_iniciativa" in sel
+    assert "combate_estado" in sel
+
+
+def test_f652b_no_regresion_turno():
+    """F6.5.2b: selección de turno actual no se ve afecta da."""
+    sel = seleccionar_tools_para_turno("¿De quién es el turno?")
+    assert sel is not None
+    assert "combate_turno_actual" in sel
+
+
+def test_f652b_anade_objeto_inventario_si_expone_inventario():
+    """F6.5.2b: 'añade la espada al inventario' SÍ expone inventario."""
+    sel = seleccionar_tools_para_turno("Añade la espada al inventario.")
+    assert sel is not None
+    assert "inventario_anadir" in sel
+    assert "inventario_listar" in sel
+
+
+def test_f652b_desequipa_escudo_si_expone_inventario():
+    """F6.5.2b: 'desequipa el escudo' SÍ expone inventario."""
+    sel = seleccionar_tools_para_turno("Desequipa el escudo.")
+    assert sel is not None
+    assert "inventario_desequipar" in sel
+
+
+def test_f652b_ataque_con_ficha_explicita_incluye_ambos():
+    """F6.5.2b: 'lee la ficha y ataca' incluye ataque + ficha (ambos explícitos)."""
+    sel = seleccionar_tools_para_turno("Lee la ficha de Tyr y ataca a la rata.")
+    assert sel is not None
+    assert "combate_atacar_enemigo" in sel
+    assert "ficha_leer" in sel

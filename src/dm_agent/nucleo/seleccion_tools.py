@@ -1,4 +1,4 @@
-"""Selección contextual de tools por turno (F6.2).
+"""Selección contextual de tools por turno (F6.2, F6.5.2b).
 
 Algunos modelos locales, con muchas tools y schemas complejos a la vez,
 fallan en emitir una tool call real incluso después de la disciplina de
@@ -14,6 +14,12 @@ reconoce ninguna categoría con señal clara, `seleccionar_tools_para_turno`
 devuelve `None`, que el llamador debe interpretar como "mantener el
 comportamiento anterior" (ofrecer todas las tools disponibles) — es el
 fallback seguro para mensajes ambiguos.
+
+F6.5.2b: cuando hay intención específica de ataque, no se añaden bloques
+completos de ficha o inventario solo por palabras ambiguas (nombre del
+personaje, nombre de arma). Se añaden solo si hay una acción explícita
+("lee la ficha", "equipa el arma"). Esto reduce el ruido de ~18 tools a
+~9 para frases típicas de ataque.
 """
 
 from __future__ import annotations
@@ -194,6 +200,21 @@ _PALABRAS_MEMORIA = {
     "próxima sesión",
 }
 
+# F6.5.2b: patrones de acción explícita para ficha e inventario.
+# Permiten distinguir "lee la ficha de Tyr" (explícito) de "Tyr ataca" (nombre).
+# Y "equipa la espada" (explícito) de "ataca con espada" (arma como objeto).
+
+_PATRON_ACCION_FICHA_EXPLICITA = re.compile(
+    r"\b(?:lee|leer|leye|actualiza|actualizar|valida|validar|guarda|guardar"
+    r"|lista|listar|muestra|mostrar|consulta|consultar"
+    r"|ficha|hoja de personaje|características|stats|atributos)\b"
+)
+
+_PATRON_ACCION_INVENTARIO_EXPLICITA = re.compile(
+    r"\b(?:añade|añadir|quita|quitar|equipa|equipar|desequipa|desequipar"
+    r"|inventario|objeto|botín|lootea|looteo|item|recoge|recoger|saca|meter)\b"
+)
+
 
 def _sin_acentos(texto: str) -> str:
     """Translitera a ASCII quitando diacríticos, para que la detección de
@@ -247,6 +268,15 @@ def seleccionar_tools_para_turno(
     coincide_reaccion = bool(_PATRON_REACCION.search(texto_norm))
     coincide_memoria = bool(_PATRON_MEMORIA.search(texto_norm))
 
+    # F6.5.2b: detección de acción explícita para ficha e inventario.
+    # "lee la ficha de Tyr" → acción explícita de ficha.
+    # "equipa la espada" → acción explícita de inventario.
+    # "Tyr ataca con espada" → sin acción explícita de ficha/inventario.
+    accion_ficha_explicita = bool(_PATRON_ACCION_FICHA_EXPLICITA.search(texto_norm))
+    accion_inventario_explicita = bool(
+        _PATRON_ACCION_INVENTARIO_EXPLICITA.search(texto_norm)
+    )
+
     if not any(
         (
             coincide_ficha,
@@ -261,10 +291,20 @@ def seleccionar_tools_para_turno(
         return None
 
     seleccion: set[str] = set()
+
+    # F6.5.2b: si hay intención de ataque, no añadir ficha/inventario
+    # por palabras ambiguas (nombre de personaje, nombre de arma).
+    # Sí añadir si hay acción explícita ("lee la ficha", "equipa el arma").
     if coincide_ficha:
-        seleccion |= TOOLS_FICHA
+        if coincide_ataque and not accion_ficha_explicita:
+            pass  # ataque activo, sin petición explícita de ficha → se omite
+        else:
+            seleccion |= TOOLS_FICHA
     if coincide_inventario:
-        seleccion |= TOOLS_INVENTARIO
+        if coincide_ataque and not accion_inventario_explicita:
+            pass  # ataque activo, sin petición explícita de inventario → se omite
+        else:
+            seleccion |= TOOLS_INVENTARIO
     if coincide_memoria:
         seleccion |= TOOLS_MEMORIA
 
