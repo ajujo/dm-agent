@@ -169,6 +169,14 @@ Cada issue: contexto → tareas → archivos → criterios de aceptación → te
 ### #F5-11 — Fixtures: enemigos low-level reutilizables
 - **P.** P1.
 
+### #F5-12 — Resolución canónica de `tipo_dano` desde fuente mecánica — ⏳ DIFERIDO (D-COMBATE-08)
+- **Contexto.** Distintos backends/modelos generan variantes de `tipo_dano` inconsistentes (`corte`, `punzante`, `puñalante`, `perforante`, `cortante`). El valor actual proviene de la narración libre del LLM.
+- **Decisión.** Diferido hasta que exista un sistema de inventario, equipo, armas y ataques de criaturas con datos estructurados.
+- **Regla futura.** El tipo de daño se derivará del arma equipada, ataque definido o ficha de criatura. El `tipo_dano` propuesto por el LLM será solo *fallback*.
+- **Ejemplos.** Espada larga → cortante, daga → perforante, maza → contundente, mordisco → perforante, garra → cortante.
+- **Archivos previstos.** `compendio/armas/`, `compendio/criaturas/`, ampliación de `esquemas/combate.py` y `herramientas/combate.py`.
+- **P.** P2.
+
 ---
 
 ## F6.1 — Disciplina de uso de tools y refuerzo del prompt

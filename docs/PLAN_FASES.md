@@ -500,6 +500,19 @@ señalizan, el jugador decide.
 
 ---
 
+### Nota: resolución de `tipo_dano` (D-COMBATE-08, diferido)
+
+Durante pruebas A/B se observó que distintos backends/modelos generan variantes
+de `tipo_dano` inconsistentes (`corte`, `punzante`, `puñalante`, `perforante`,
+`cortante`). **Decisión: diferido** hasta que exista un sistema de inventario,
+equipo, armas y ataques de criaturas con datos estructurados. La regla futura
+es que el tipo de daño se derive del arma equipada, ataque definido o ficha de
+criatura; el valor propuesto por el LLM será solo *fallback*. Ver
+[DECISIONES_ABIERTAS.md](DECISIONES_ABIERTAS.md) § D-COMBATE-08 y
+[BACKLOG.md](BACKLOG.md) #F5-12.
+
+---
+
 ## F6.5.3a — Coherencia narrativa y avisos tras tools de combate
 
 > Igual que F6.5.1-F6.5.2c: no es parte de "Fase 6" de creación de mundo.

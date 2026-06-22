@@ -81,6 +81,14 @@
 - **Motivo:** el modelo declaraba la victoria narrativa antes de que se cerrara el combate formalmente, dejando estado inconsistente (enemigos derrotados pero combate sin cerrar, sin resumen narrativo de cierre).
 - **Consecuencia:** el LLM puede narrar "todos los enemigos están derrotados" pero debe llamar a `combate_terminar` para cerrar el combate. El prompt también obliga a mencionar los `avisos` de las herramientas en la narración.
 
+### D-COMBATE-08 — Resolución canónica de `tipo_dano` → **Fuente mecánica, no narración libre**
+
+- Durante pruebas A/B se observó que distintos backends/modelos generan variantes de `tipo_dano` inconsistentes: `corte`, `punzante`, `puñalante`, `perforante`, `cortante`…
+- **Decisión diferida:** la resolución canónica de `tipo_dano` se abordará cuando se implemente o amplíe el sistema de inventario, equipo, armas y ataques de criaturas.
+- **Regla futura:** el tipo de daño debe derivarse prioritariamente del arma equipada, ataque definido o ficha de criatura. El valor `tipo_dano` propuesto por el LLM solo se usará como *fallback*, nunca como fuente principal.
+- **Ejemplos de mapeo esperado:** espada larga → cortante, daga → perforante, maza → contundente, mordisco de rata → perforante, garra → cortante.
+- **Fase prevista:** junto con el sistema de equipo/armas (F3 ampliación o fase de compendio).
+
 ---
 
 ## Notas para Fase 2
